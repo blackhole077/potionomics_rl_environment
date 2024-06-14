@@ -6,6 +6,7 @@ from loguru import logger
 import numpy as np
 from pydantic import BaseModel
 from pydantic import Field
+import torch
 
 from potionomics_env.potionomics_enum import PotionomicsIngredientType
 from potionomics_env.potionomics_enum import PotionomicsPotionRecipeType
@@ -95,7 +96,25 @@ class PotionomicsPotionRecipe(BaseModel):
     d_magimin_ratio_int: int = Field(alias="D")
     e_magimin_ratio_int: int = Field(alias="E")
     ratio_total: Optional[int] = Field(default=0)
+    magimin_ratios_int: Optional[List[int]] = Field(default=[])
     magimin_ratios: Optional[List[float]] = Field(default=[])
+
+    def calculate_magimin_ratios_int(self):
+        """Compile the magimin ratios as integers.
+        Used by get_percent_full_magamin
+        """
+        self.magimin_ratios_int = np.ascontiguousarray(
+            np.array(
+                [
+                    self.a_magimin_ratio_int,
+                    self.b_magimin_ratio_int,
+                    self.c_magimin_ratio_int,
+                    self.d_magimin_ratio_int,
+                    self.e_magimin_ratio_int,
+                ],
+                dtype=int,
+            ),
+        )
 
     def calculate_magimin_ratios(self) -> None:
         """Convert the recipe ratios from integer values to floating-point values."""
@@ -118,10 +137,10 @@ class PotionomicsPotionRecipe(BaseModel):
         )
 
     def __repr__(self):
-        return f"\
-Name: {self.name}\t[{self.potion_type}]\n\
-Recipe: <{self.a_magimin_ratio_int}\t{self.b_magimin_ratio_int}\t{self.c_magimin_ratio_int}\t{self.d_magimin_ratio_int}\t{self.e_magimin_ratio_int}>\n\
-    "
+        return f"""
+Name: {self.name}\t[{self.potion_type}]
+Recipe: <{self.a_magimin_ratio_int}\t{self.b_magimin_ratio_int}\t{self.c_magimin_ratio_int}\t{self.d_magimin_ratio_int}\t{self.e_magimin_ratio_int}>
+    """
 
 
 class PotionomicsCauldron(BaseModel):
@@ -180,17 +199,38 @@ class PotionomicsCauldron(BaseModel):
         self.current_d_magimin_amount = 0
         self.current_e_magimin_amount = 0
 
+    def is_full(self) -> bool:
+        """Determine if the cauldron is full.
+
+        :return: A flag that is set to true if the number of items equals or
+        exceeds the cauldron contents.
+        :rtype: bool
+        """
+
+        return self.current_num_items >= self.max_num_items_allowed
+
+    def get_percent_full_magamin(self) -> float:
+        """Get the amount of magamins in the cauldron as a percentage.
+
+        :return: A floating-point value in the range [0, 1].
+        :rtype: float
+        """
+
+        return float(self.current_total_magimin_amount) / float(
+            self.max_total_magimin_allowed
+        )
+
     def __repr__(self):
-        return f"\
-Number of items in cauldron: {self.current_num_items}/{self.max_num_items_allowed}\n\
-Total Magimin Amount:\n\
-A: {self.current_a_magimin_amount}\n\
-B: {self.current_b_magimin_amount}\n\
-C: {self.current_c_magimin_amount}\n\
-D: {self.current_d_magimin_amount}\n\
-E: {self.current_e_magimin_amount}\n\
-Total: {self.current_total_magimin_amount}/{self.max_total_magimin_allowed}\n\
-    "
+        return f"""
+Number of items in cauldron: {self.current_num_items}/{self.max_num_items_allowed}
+Total Magimin Amount:
+A: {self.current_a_magimin_amount}
+B: {self.current_b_magimin_amount}
+C: {self.current_c_magimin_amount}
+D: {self.current_d_magimin_amount}
+E: {self.current_e_magimin_amount}
+Total: {self.current_total_magimin_amount}/{self.max_total_magimin_allowed}
+        """
 
 
 class PotionomicsEnvironment(gym.Env):
@@ -239,12 +279,23 @@ class PotionomicsEnvironment(gym.Env):
         self.all_recipes = all_recipes
         self.all_cauldrons = all_cauldrons
         # BUG: Basically since each cauldron has different amounts of things you can put in, the size of the observation wouldn't be the same. So for now we're not dealing with that since we'd need to encode the state.
-        self.cauldron: PotionomicsCauldron = self.all_cauldrons[
-            np.random.choice(len(self.all_cauldrons), 1)[0]
-        ].model_copy(deep=True)
-        self.recipe: PotionomicsPotionRecipe = self.all_recipes[
-            np.random.choice(len(self.all_recipes), 1)[0]
-        ]
+        # self.cauldron: PotionomicsCauldron = self.all_cauldrons[
+        #     np.random.choice(len(self.all_cauldrons), 1)[0]
+        # ].model_copy(deep=True)
+        self.cauldron: PotionomicsCauldron = self.all_cauldrons[-1]
+        self.cauldron.setup()
+        # self.recipe: PotionomicsPotionRecipe = self.all_recipes[
+        #     np.random.choice(len(self.all_recipes), 1)[0]
+        # ]
+        self.recipe: PotionomicsPotionRecipe = self.all_recipes[4]
+        self.num_ingredients: np.ndarray = np.ascontiguousarray(
+            np.random.randint(
+                low=1,
+                high=self.cauldron.max_num_items_allowed + 1,
+                size=len(self.all_ingredients) + 1,
+            )
+        )
+        self.num_ingredients[0] = 0  # Set the None action to have 0
         self.current_ingredients: List[int] = []
         self.current_stability = PotionomicsPotionStability.CANNOTMAKE
         self.potion_tier: PotionomicsPotionTier = None
@@ -508,6 +559,8 @@ class PotionomicsEnvironment(gym.Env):
         item_to_insert: PotionomicsIngredient = self._action_to_ingredient[
             index_of_item_to_insert
         ]
+        # logger.info(f"Attempting to Insert {item_to_insert.name}\tStock: {self.num_ingredients[index_of_item_to_insert]}")
+        has_enough_of_item: bool = self.num_ingredients[index_of_item_to_insert] > 0
         magimin_check = (
             self.cauldron.current_total_magimin_amount
             + item_to_insert.total_magimin_value
@@ -515,6 +568,7 @@ class PotionomicsEnvironment(gym.Env):
         )
         if (
             len(self.current_ingredients) < self.cauldron.max_num_items_allowed
+            and has_enough_of_item
             and magimin_check
             and item_to_insert is not None
         ):
@@ -529,8 +583,20 @@ class PotionomicsEnvironment(gym.Env):
             self.cauldron.current_num_items += 1
             self.current_ingredients.append(index_of_item_to_insert)
             self.cost_of_items += item_to_insert.item_price
+            self.num_ingredients[index_of_item_to_insert] -= 1
+            # if self.num_ingredients[index_of_item_to_insert] < 1:
+            #     logger.warning(f"{item_to_insert.name} has no more stock.")
             return 1
         else:
+            #             logger.debug(
+            #                 f"""
+            # Not Legal Because:
+            # Enough Space?: {len(self.current_ingredients) < self.cauldron.max_num_items_allowed}
+            # Enough of Item?: {has_enough_of_item}
+            # Passes Magimin Check?: {magimin_check}
+            # Item to Insert?: {item_to_insert}
+            # """
+            #             )
             return 0
 
     def calculate_potion_rank_and_price(self) -> None:
@@ -633,7 +699,7 @@ class PotionomicsEnvironment(gym.Env):
             recipe_magimin_ratios - current_magimin_ratios
         )
         cumulative_delta: float = (
-            (recipe_magimin_ratios > 0).astype(np.int_) * magimin_deltas
+            (self.recipe.magimin_ratios_int > 0).astype(np.int_) * magimin_deltas
         ).sum()
         if cumulative_delta >= 0.25:
             self.current_stability = PotionomicsPotionStability.CANNOTMAKE
@@ -701,50 +767,60 @@ class PotionomicsEnvironment(gym.Env):
             else:
                 self.potion_traits[idx] = 0
 
-    def _calculate_reward_function(self, legal_move: int) -> float:
+    def calculate_stability_bonus(self) -> float:
+        """Calculate the stability bonus reward.
+
+        Uses the following equation:
+            `y = 1.661 * log_10(int(x) + 1e-8)`
+        Which would have the following values for each stability value:
+        |stability | x | y |
+        |:-:|:-:|:-:|
+        | CANNOTMAKE | 0 | -13.288    |
+        | UNSTABLE   | 1 |   7.214e-9 |
+        | STABLE     | 2 |   0.500    |
+        | VERYSTABLE | 3 |   0.793    |
+        | PERFECT    | 4 |   1.000    |
+
+        :return: A floating-point value that represents the bonus reward for
+        creating high-stability potions.
+        :rtype: float
+        """
+
+        # The reason 1.661 is chosen is because we want Perfect ratio potions to give a reward of 1 (1.661*log_10(4) = 1)
+        return 1.661 * np.log10(int(self.current_stability) + 1e-8)
+
+    def _calculate_reward_function(self) -> torch.Tensor:
         """Internal function that calculates the reward.
 
-        :param legal_move: A flag that indicates whether the action that the agent took this time-step was legal or not.
-        :type legal_move: int
         :return: The reward to give the agent for the current time-step.
         :rtype: float
         """
 
-        cumulative_delta = self.calculate_current_stability()
+        cumulative_delta = torch.tensor(self.calculate_current_stability())
         reward = 0.0
-        if (
-            not legal_move
-            or self.current_stability == PotionomicsPotionStability.CANNOTMAKE
-            or self.cauldron.current_num_items < 2
-        ):
-            reward = 0.0
+        if self.cauldron.current_num_items < 2:
+            return -1
         else:
-            # The reason 1.661 is chosen is because we want Perfect ratio potions to give a reward of 1 (1.661*log_10(4) = 1)
             self.calculate_potion_rank_and_price()
             self.calculate_potion_traits()
             # Trait influence on price is calculated here as we want the denominator to serve as a baseline
-            price_vs_cost = (
-                (self.current_base_price * (1 + (0.05 * self.potion_traits.sum())))
-                - self.cost_of_items
-            ) / self.current_base_price
-            # The more magimins the better, generally speaking
-            cauldron_magimin_ratio = (
-                self.cauldron.current_total_magimin_amount
-                / self.cauldron.max_total_magimin_allowed
-            )
+            # price_vs_cost = (
+            #     (self.current_base_price * (1 + (0.05 * self.potion_traits.sum())))
+            #     - self.cost_of_items
+            # ) / self.current_base_price
             # The higher stability, the better
-            stability_bonus = 1.661 * np.log10(int(self.current_stability)) - (
-                2 * np.power(0.2, self.current_stability)
-            )
-
+            stability_bonus = self.calculate_stability_bonus()
             reward = (
-                cauldron_magimin_ratio
-                - cumulative_delta
-                + stability_bonus
-                + price_vs_cost
+                (1.0 - cumulative_delta) * (self.cauldron.get_percent_full_magamin())
+            ) + stability_bonus  # + price_vs_cost]
+            reward = float(np.clip(reward, -1, 1))
+            logger.success(
+                f"Reward: {reward}\t({((1.0 - cumulative_delta)*(self.cauldron.get_percent_full_magamin()))}+{stability_bonus})"
             )
+            logger.success(self._get_info())
             logger.debug(
-                f"{cauldron_magimin_ratio} - {cumulative_delta} +  {stability_bonus}  + {price_vs_cost}"
+                # f"{cauldron_magimin_ratio} - {cumulative_delta} +  {stability_bonus}  + {price_vs_cost}"
+                f"{cumulative_delta} +  {stability_bonus} (clipped between -1, 1)"
             )
         return reward
 
@@ -764,11 +840,21 @@ class PotionomicsEnvironment(gym.Env):
         self.current_base_price = 0
         self.cost_of_items = 0
         self.potion_traits: np.ndarray = np.zeros((5,))
+        self.num_ingredients: np.ndarray = np.ascontiguousarray(
+            np.random.randint(
+                low=1,
+                high=self.cauldron.max_num_items_allowed + 1,
+                size=len(self.all_ingredients) + 1,
+            )
+        )
+        self.num_ingredients[0] = 0  # Set the None action to have 0
         # NOTE: We need to execute model_copy() because otherwise the information isn't cleared out
-        self.cauldron = self.all_cauldrons[
-            np.random.choice(len(self.all_recipes), 1)[0]
-        ].model_copy(deep=True)
-        self.recipe = self.all_recipes[np.random.choice(len(self.all_recipes), 1)[0]]
+        # self.cauldron: PotionomicsCauldron = self.all_cauldrons[
+        #     np.random.choice(len(self.all_recipes), 1)[0]
+        # ].model_copy(deep=True)
+        self.cauldron: PotionomicsCauldron = self.all_cauldrons[-1]
+        self.cauldron.setup()
+        # self.recipe = self.all_recipes[np.random.choice(len(self.all_recipes), 1)[0]]
         observation = self._get_obs()
         info = self._get_info()
         return observation, info
@@ -785,23 +871,33 @@ class PotionomicsEnvironment(gym.Env):
         """
 
         terminated: bool = False
-        legal_move: int = 0
+        legal_move: int = 1
         if self._action_to_ingredient[action]:
             legal_move = self.insert_item(index_of_item_to_insert=action)
-        if self._action_to_ingredient[action] is None or not legal_move:
+        terminate_episode = (
+            (action is None) or (not legal_move) or (self.cauldron.is_full())
+        )
+        if terminate_episode:
             terminated = True
-        reward = self._calculate_reward_function(legal_move)
+        if legal_move:
+            reward = self._calculate_reward_function()
+        else:
+            reward = -1
         observation = self._get_obs()
         info = self._get_info()
         return observation, reward, terminated, False, info
 
     def _get_obs(self) -> List[Union[int, float]]:
         observation = []
+        ### Ingredient Information ###
+        observation.extend(self.num_ingredients.tolist())
         ### Cauldron Information ###
-        observation.extend(self.current_ingredients)
-        observation.extend(
-            [0] * (POTIONOMICS_MAX_ITEMS_IN_CAULDRON - self.cauldron.current_num_items)
-        )
+        # observation.extend(self.current_ingredients)
+        # observation.extend(
+        #     [-1] * (POTIONOMICS_MAX_ITEMS_IN_CAULDRON - self.cauldron.current_num_items)
+        # )
+        observation.extend(list(self.calculate_current_magimin_ratios()))
+        observation.extend(self.recipe.magimin_ratios)
         observation.append(self.cauldron.current_total_magimin_amount)
         observation.append(self.cauldron.max_total_magimin_allowed)
         observation.append(self.cauldron.current_num_items)
@@ -809,9 +905,9 @@ class PotionomicsEnvironment(gym.Env):
         ### Potion Information ###
         observation.append(int(self.current_stability))
         observation.append(int(self.potion_tier) if self.potion_tier else -1)
-        observation.extend(list(self.potion_traits))
-        observation.append(self.current_base_price)
-        observation.append(self.cost_of_items)
+        # observation.extend(list(self.potion_traits))
+        # observation.append(self.current_base_price)
+        # observation.append(self.cost_of_items)
         return observation
 
     def _get_info(self):
@@ -845,6 +941,7 @@ def get_env() -> PotionomicsEnvironment:
         for entry in csv_data:
             item = PotionomicsPotionRecipe(**entry)
             item.calculate_magimin_ratios()
+            item.calculate_magimin_ratios_int()
             all_recipes.append(item)
 
     all_cauldrons: List[PotionomicsCauldron] = []
