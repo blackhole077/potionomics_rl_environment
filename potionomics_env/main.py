@@ -588,26 +588,12 @@ class PotionomicsEnvironment(gym.Env):
             return -1
         else:
             self.calculate_potion_rank_and_price()
-            self.calculate_potion_traits()
-            # Trait influence on price is calculated here as we want the denominator to serve as a baseline
-            # price_vs_cost = (
-            #     (self.current_base_price * (1 + (0.05 * self.potion_traits.sum())))
-            #     - self.cost_of_items
-            # ) / self.current_base_price
             # The higher stability, the better
             stability_bonus = self.calculate_stability_bonus()
             reward = (
                 (1.0 - cumulative_delta) * (self.cauldron.get_percent_full_magamin())
             ) + stability_bonus  # + price_vs_cost]
             reward = float(np.clip(reward, -1, 1))
-            logger.success(
-                f"Reward: {reward}\t({((1.0 - cumulative_delta)*(self.cauldron.get_percent_full_magamin()))}+{stability_bonus})"
-            )
-            logger.success(self._get_info())
-            logger.debug(
-                # f"{cauldron_magimin_ratio} - {cumulative_delta} +  {stability_bonus}  + {price_vs_cost}"
-                f"{cumulative_delta} +  {stability_bonus} (clipped between -1, 1)"
-            )
         return reward
 
     def reset(self, seed: Optional[int] = None, options: Dict[str, Any] = None) -> None:
