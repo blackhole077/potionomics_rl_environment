@@ -14,7 +14,7 @@ from potionomics_env.schemas import (
     PotionomicsPotionRecipe,
 )
 
-# This is a placeholder value to ensure that all observations are the correct length. If you choose to encode the state information to ensure fixed-length then would no longer necessary.
+# This is a placeholder value to ensure that all observations are the correct length. If you choose to encode the state information to ensure fixed-length then this would no longer be necessary.
 POTIONOMICS_MAX_ITEMS_IN_CAULDRON = 14
 logger = logging.getLogger(__name__)
 
