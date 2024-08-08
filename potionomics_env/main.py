@@ -678,10 +678,6 @@ class PotionomicsEnvironment(gym.Env):
         ### Ingredient Information ###
         observation.extend(self.num_ingredients.tolist())
         ### Cauldron Information ###
-        # observation.extend(self.current_ingredients)
-        # observation.extend(
-        #     [-1] * (POTIONOMICS_MAX_ITEMS_IN_CAULDRON - self.cauldron.current_num_items)
-        # )
         observation.extend(list(self.calculate_current_magimin_ratios()))
         observation.extend(self.recipe.magimin_ratios)
         observation.append(self.cauldron.current_total_magimin_amount)
@@ -691,9 +687,6 @@ class PotionomicsEnvironment(gym.Env):
         ### Potion Information ###
         observation.append(int(self.current_stability))
         observation.append(int(self.potion_tier) if self.potion_tier else -1)
-        # observation.extend(list(self.potion_traits))
-        # observation.append(self.current_base_price)
-        # observation.append(self.cost_of_items)
         return observation
 
     def _get_info(self):
