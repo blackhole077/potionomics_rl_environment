@@ -180,7 +180,7 @@ if __name__ == "__main__":
             )
             # Convert the observation to a tensor
             reward = torch.tensor([reward], device=device)
-            if reward > 0:
+            if reward > 0 or i_episode % 1000 == 0:
                 logger.debug(f"Reward: {reward.item()}")
                 logger.debug(f"Cauldron: {info['current_cauldron'].name}")
                 logger.debug(f"Recipe Name: {info['current_recipe'].name}")

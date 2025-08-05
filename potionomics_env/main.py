@@ -73,10 +73,12 @@ class PotionomicsEnvironment(gym.Env):
         # self.recipe: PotionomicsPotionRecipe = self.all_recipes[
         #     np.random.choice(len(self.all_recipes), 1)[0]
         # ]
-        self.recipe: PotionomicsPotionRecipe = self.all_recipes[4]
+        self.recipe: PotionomicsPotionRecipe = self.all_recipes[
+            np.random.choice(len(self.all_recipes), 1)[0]
+        ]
         self.num_ingredients: np.ndarray = np.ascontiguousarray(
             np.random.randint(
-                low=1,
+                low=0,
                 high=self.cauldron.max_num_items_allowed + 1,
                 size=len(self.all_ingredients) + 1,
             )
@@ -87,7 +89,7 @@ class PotionomicsEnvironment(gym.Env):
             np.zeros(shape=(len(self.all_ingredients) + 1,), dtype=np.int_)
         )
         self.current_stability = PotionomicsPotionStability.CANNOTMAKE
-        self.stability_rewards:List[float] = [0.0, 0.05, 0.5, 0.75, 1.0]
+        self.stability_rewards: List[float] = [0.0, 0.25, 0.5, 0.75, 1.0]
         self.potion_tier: PotionomicsPotionTier = None
         self.potion_traits: np.ndarray = np.zeros((5,))
         self.potion_magimin_thresholds_array = np.array(
@@ -582,7 +584,7 @@ class PotionomicsEnvironment(gym.Env):
 
     def calculate_stability_bonus(self) -> float:
         """Calculate the stability bonus reward.
-        
+
         :return: A floating-point value that represents the bonus reward for
         creating high-stability potions.
         :rtype: float
@@ -682,7 +684,7 @@ class PotionomicsEnvironment(gym.Env):
         :type options: Dict[str, Any], optional
         """
 
-        super().reset(seed=seed)
+        super().reset()
         self.current_ingredients: np.ndarray = np.ascontiguousarray(
             np.zeros(len(self.all_ingredients) + 1, dtype=np.int_)
         )
@@ -693,7 +695,7 @@ class PotionomicsEnvironment(gym.Env):
         self.potion_traits: np.ndarray = np.zeros((5,))
         self.num_ingredients: np.ndarray = np.ascontiguousarray(
             np.random.randint(
-                low=1,
+                low=0,
                 high=self.cauldron.max_num_items_allowed + 1,
                 size=len(self.all_ingredients) + 1,
             )
@@ -705,7 +707,9 @@ class PotionomicsEnvironment(gym.Env):
         # ].model_copy(deep=True)
         self.cauldron: PotionomicsCauldron = self.all_cauldrons[-1]
         self.cauldron.setup()
-        # self.recipe = self.all_recipes[np.random.choice(len(self.all_recipes), 1)[0]]
+        self.recipe = self.all_recipes[
+            np.random.choice(len(self.all_recipes), 1)[0]
+        ]
         observation = self._get_obs()
         info = self._get_info()
         return observation, info
