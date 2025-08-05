@@ -71,15 +71,56 @@ The first component is the cumulative delta. This is the sum of the absolute dis
 
 The logic is that, as the agent approaches the perfect recipe, the cumulative delta will approach zero.
 
-$$
-Magamins = \{A, B, C, D, E\}\\
-\forall_{x}\in Magamins, C_{x} = (Total^{ingredients}_{x}/Total^{cauldron}_{x})\\
-\forall_{x}\in Magamins, R_{x} = (Recipe_{x} / \Sigma Recipe)\\
-ratios_{cauldron} = <C_{A}, C_{B}, C_{C}, C_{D}, C_{E}>\\
-ratios_{recipe} = <R_{A}, R_{B}, R_{C}, R_{D}, R_{E}>\\
-ratios^{mask}_{i} = \mathbf{1}_{(ratios^{recipe}_{i} \neq 0)}\\
-\Sigma\Delta_{ratios} = \Sigma\left(| ratios_{cauldron} - ratios_{recipe} | * (ratios_{mask})\right)\\
-$$
+<div align="center">
+
+<table>
+    <tr>
+        <td colspan="2"><b>Definitions</b></td>
+    </tr>
+    <tr>
+        <td>Magimins</td>
+        <td>{A, B, C, D, E}</td>
+    </tr>
+    <tr>
+        <td>Cauldron Ratio (C<sub>x</sub>)</td>
+        <td>
+            For each x in Magimins:<br>
+            <code>C<sub>x</sub> = Total<sup>ingredients</sup><sub>x</sub> / Total<sup>cauldron</sup><sub>x</sub></code>
+        </td>
+    </tr>
+    <tr>
+        <td>Recipe Ratio (R<sub>x</sub>)</td>
+        <td>
+            For each x in Magimins:<br>
+            <code>R<sub>x</sub> = Recipe<sub>x</sub> / Σ Recipe</code>
+        </td>
+    </tr>
+    <tr>
+        <td>Cauldron Ratios</td>
+        <td>
+            <code>&lt;C<sub>A</sub>, C<sub>B</sub>, C<sub>C</sub>, C<sub>D</sub>, C<sub>E</sub>&gt;</code>
+        </td>
+    </tr>
+    <tr>
+        <td>Recipe Ratios</td>
+        <td>
+            <code>&lt;R<sub>A</sub>, R<sub>B</sub>, R<sub>C</sub>, R<sub>D</sub>, R<sub>E</sub>&gt;</code>
+        </td>
+    </tr>
+    <tr>
+        <td>Mask</td>
+        <td>
+            <code>ratios<sup>mask</sup><sub>i</sub> = 1</code> if <code>ratios<sup>recipe</sup><sub>i</sub> ≠ 0</code>, else 0
+        </td>
+    </tr>
+    <tr>
+        <td>Cumulative Delta</td>
+        <td>
+            <code>Σ Δ<sub>ratios</sub> = Σ (|ratios<sub>cauldron</sub> - ratios<sub>recipe</sub>| × ratios<sup>mask</sup>)</code>
+        </td>
+    </tr>
+</table>
+</div>
 
 #### Stability Bonus
 
@@ -87,21 +128,27 @@ In-game, potions that have higher stability have a higher chance to gain one or 
 
 However, to avoid adding more complexity to the environment, I opted to turn this into a bonus reward instead. This also allowed me to narrow the task down to "whether the agent can make a functional potion or not".
 
-The stability bonus is calculated using this equation, which I came up with arbitrarily. Below that is the table that maps stability values to the bonus that would be applied to the reward. Naturally, potions that cannot be made per the game's rules are penalized heavily, with high-stability potions receiving higher bonuses.
+The stability bonus was originally calculated using this equation, which I came up with arbitrarily.
 
 One final note, the co-efficient $1.661$ was chosen because the bonus reward becomes $1$ with perfect ratios.
-$$
-\epsilon = 1*10^{-8}\\
-Bonus_{stability} = 1.661 * log_{10}((stability_{potion}+\epsilon))
-$$
+<div align="center">
+    <p>
+        <b>&epsilon; = 1 &times; 10<sup>-8</sup></b>
+    </p>
+    <p>
+        <b>Bonus<sub>stability</sub> = 1.661 &times; log<sub>10</sub>(stability<sub>potion</sub> + &epsilon;)</b>
+    </p>
+</div>
 
-|Stability | x | y |
-|:-:|:-:|:-:|
-| CANNOTMAKE | 0 | -13.288    |
-| UNSTABLE   | 1 |   7.214e-9 |
-| STABLE     | 2 |   0.500    |
-| VERYSTABLE | 3 |   0.793    |
-| PERFECT    | 4 |   1.000    |
+However, the complexity of the equation did not really prove worthwhile, nor did having such a large negative reward for the `CANNOTMAKE` tier. Therefore, I instead opted to use an arbitrary sequence of values:
+
+<div align="center">
+    <p>
+        <b>Bonus<sub>stability</sub> = 0.25 &times; x</b>
+    </p>
+</div>
+
+This formula is straightforward, yet it still provides meaningful rewards for producing high-stability potions.
 
 #### Percent of Cauldron Used
 
