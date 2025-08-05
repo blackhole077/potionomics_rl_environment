@@ -82,8 +82,12 @@ class PotionomicsEnvironment(gym.Env):
             )
         )
         self.num_ingredients[0] = 0  # Set the None action to have 0
-        self.current_ingredients: List[int] = []
+        # print(f"Number of Ingredients: {len(all_ingredients)}")
+        self.current_ingredients: np.ndarray = np.ascontiguousarray(
+            np.zeros(shape=(len(self.all_ingredients) + 1,), dtype=np.int_)
+        )
         self.current_stability = PotionomicsPotionStability.CANNOTMAKE
+        self.stability_rewards:List[float] = [0.0, 0.05, 0.5, 0.75, 1.0]
         self.potion_tier: PotionomicsPotionTier = None
         self.potion_traits: np.ndarray = np.zeros((5,))
         self.potion_magimin_thresholds_array = np.array(
@@ -345,44 +349,58 @@ class PotionomicsEnvironment(gym.Env):
         item_to_insert: PotionomicsIngredient = self._action_to_ingredient[
             index_of_item_to_insert
         ]
-        # logger.info(f"Attempting to Insert {item_to_insert.name}\tStock: {self.num_ingredients[index_of_item_to_insert]}")
-        has_enough_of_item: bool = self.num_ingredients[index_of_item_to_insert] > 0
+        logger.info(
+            f"Attempting to Insert {item_to_insert.name}\tStock: {self.num_ingredients[index_of_item_to_insert]}"
+        )
+        has_enough_of_item: bool = (
+            self.num_ingredients[index_of_item_to_insert] > 0
+        )
         magimin_check = (
             self.cauldron.current_total_magimin_amount
             + item_to_insert.total_magimin_value
             <= self.cauldron.max_total_magimin_allowed
         )
         if (
-            len(self.current_ingredients) < self.cauldron.max_num_items_allowed
+            self.current_ingredients.sum() < self.cauldron.max_num_items_allowed
             and has_enough_of_item
             and magimin_check
             and item_to_insert is not None
         ):
-            self.cauldron.current_a_magimin_amount += item_to_insert.a_magimin_value
-            self.cauldron.current_b_magimin_amount += item_to_insert.b_magimin_value
-            self.cauldron.current_c_magimin_amount += item_to_insert.c_magimin_value
-            self.cauldron.current_d_magimin_amount += item_to_insert.d_magimin_value
-            self.cauldron.current_e_magimin_amount += item_to_insert.e_magimin_value
+            self.cauldron.current_a_magimin_amount += (
+                item_to_insert.a_magimin_value
+            )
+            self.cauldron.current_b_magimin_amount += (
+                item_to_insert.b_magimin_value
+            )
+            self.cauldron.current_c_magimin_amount += (
+                item_to_insert.c_magimin_value
+            )
+            self.cauldron.current_d_magimin_amount += (
+                item_to_insert.d_magimin_value
+            )
+            self.cauldron.current_e_magimin_amount += (
+                item_to_insert.e_magimin_value
+            )
             self.cauldron.current_total_magimin_amount += (
                 item_to_insert.total_magimin_value
             )
             self.cauldron.current_num_items += 1
-            self.current_ingredients.append(index_of_item_to_insert)
+            self.current_ingredients[index_of_item_to_insert] += 1
             self.cost_of_items += item_to_insert.item_price
             self.num_ingredients[index_of_item_to_insert] -= 1
             # if self.num_ingredients[index_of_item_to_insert] < 1:
             #     logger.warning(f"{item_to_insert.name} has no more stock.")
             return 1
         else:
-            #             logger.debug(
-            #                 f"""
-            # Not Legal Because:
-            # Enough Space?: {len(self.current_ingredients) < self.cauldron.max_num_items_allowed}
-            # Enough of Item?: {has_enough_of_item}
-            # Passes Magimin Check?: {magimin_check}
-            # Item to Insert?: {item_to_insert}
-            # """
-            #             )
+            logger.debug(
+                f"""
+            Not Legal Because:
+            Enough Space?: {len(self.current_ingredients) < self.cauldron.max_num_items_allowed}
+            Enough of Item?: {has_enough_of_item}
+            Passes Magimin Check?: {magimin_check}
+            Item to Insert?: {item_to_insert}
+            """
+            )
             return 0
 
     def calculate_potion_rank_and_price(self) -> None:
@@ -406,10 +424,12 @@ class PotionomicsEnvironment(gym.Env):
             potion_index // self.potion_magimin_thresholds_array.shape[0]
         )
         row = potion_index // self.potion_magimin_thresholds_array.shape[0]
-        col = potion_index - (row * self.potion_magimin_thresholds_array.shape[0])
-        self.current_base_price = self.potion_prices_dict.get(self.recipe.name)[row][
-            col
-        ]
+        col = potion_index - (
+            row * self.potion_magimin_thresholds_array.shape[0]
+        )
+        self.current_base_price = self.potion_prices_dict.get(self.recipe.name)[
+            row
+        ][col]
 
     def calculate_current_magimin_ratios(self) -> np.ndarray:
         """Calculate the normalized magimin content of all ingredients in the cauldron.
@@ -485,7 +505,8 @@ class PotionomicsEnvironment(gym.Env):
             recipe_magimin_ratios - current_magimin_ratios
         )
         cumulative_delta: float = (
-            (self.recipe.magimin_ratios_int > 0).astype(np.int_) * magimin_deltas
+            (self.recipe.magimin_ratios_int > 0).astype(np.int_)
+            * magimin_deltas
         ).sum()
         if cumulative_delta >= 0.25:
             self.current_stability = PotionomicsPotionStability.CANNOTMAKE
@@ -503,7 +524,13 @@ class PotionomicsEnvironment(gym.Env):
         raise NotImplementedError()
 
     def _get_item_names_from_idx(self) -> List[str]:
-        return [self._action_to_ingredient[x].name for x in self.current_ingredients]
+        base_string: str = ""
+        for idx, ingredient in enumerate(self.all_ingredients):
+            if self.current_ingredients[idx] > 0:
+                base_string += (
+                    f"{ingredient.name} x{self.current_ingredients[idx]}\n"
+                )
+        return base_string
 
     def _get_current_ingredient_traits(self) -> np.ndarray:
         """Get the traits of all ingredients in the cauldron.
@@ -514,7 +541,7 @@ class PotionomicsEnvironment(gym.Env):
         """
 
         ingredients: List[int] = []
-        for ingredient_idx in self.current_ingredients:
+        for ingredient_idx in np.unique(self.current_ingredients):
             ingredient: PotionomicsIngredient = self._action_to_ingredient[
                 ingredient_idx
             ]
@@ -555,25 +582,13 @@ class PotionomicsEnvironment(gym.Env):
 
     def calculate_stability_bonus(self) -> float:
         """Calculate the stability bonus reward.
-
-        Uses the following equation:
-            `y = 1.661 * log_10(int(x) + 1e-8)`
-        Which would have the following values for each stability value:
-        |stability | x | y |
-        |:-:|:-:|:-:|
-        | CANNOTMAKE | 0 | -13.288    |
-        | UNSTABLE   | 1 |   7.214e-9 |
-        | STABLE     | 2 |   0.500    |
-        | VERYSTABLE | 3 |   0.793    |
-        | PERFECT    | 4 |   1.000    |
-
+        
         :return: A floating-point value that represents the bonus reward for
         creating high-stability potions.
         :rtype: float
         """
 
-        # The reason 1.661 is chosen is because we want Perfect ratio potions to give a reward of 1 (1.661*log_10(4) = 1)
-        return 1.661 * np.log10(int(self.current_stability) + 1e-8)
+        return self.stability_rewards[self.current_stability.value]
 
     def _calculate_reward_function(self) -> torch.Tensor:
         """Internal function that calculates the reward.
@@ -584,19 +599,81 @@ class PotionomicsEnvironment(gym.Env):
 
         cumulative_delta = torch.tensor(self.calculate_current_stability())
         reward = 0.0
-        if self.cauldron.current_num_items < 2:
-            return -1
+        if (
+            self.cauldron.current_num_items < 2
+            or self.current_stability == PotionomicsPotionStability.CANNOTMAKE
+        ):
+            return (
+                reward  # No reward for not having enough items in the cauldron
+            )
         else:
             self.calculate_potion_rank_and_price()
             # The higher stability, the better
             stability_bonus = self.calculate_stability_bonus()
+            logger.debug(
+                f"Reward calculation: (1.0 - cumulative_delta)={1.0 - cumulative_delta:.4f}, "
+                f"percent_full_magamin={self.cauldron.get_percent_full_magamin():.4f}, "
+                f"stability_bonus={stability_bonus:.4f}"
+            )
             reward = (
-                (1.0 - cumulative_delta) * (self.cauldron.get_percent_full_magamin())
-            ) + stability_bonus  # + price_vs_cost]
-            reward = float(np.clip(reward, -1, 1))
+                (1.0 - cumulative_delta)
+                * (self.cauldron.get_percent_full_magamin())
+            ) + stability_bonus  # + price_vs_cost
+            # reward = float(np.clip(reward, -1.0, 1.0))
         return reward
 
-    def reset(self, seed: Optional[int] = None, options: Dict[str, Any] = None) -> None:
+    def _calculate_action_mask(self) -> np.ndarray:
+        """Calculate the action mask for the agent.
+
+        The action mask is a binary array that indicates which actions are legal.
+        An action is legal if:
+            1. The item is not None
+            2. There is space in the cauldron for the item
+            3. The item does not exceed the remaining magimins available
+
+        :return: A binary array indicating which actions are legal.
+        :rtype: np.ndarray
+        """
+
+        action_mask = np.ones(len(self.all_ingredients) + 1, dtype=np.int_)
+        # Mask out actions (ingredients) that have a count of zero
+        action_mask[1:][self.num_ingredients[1:] == 0] = 0
+        # Check if the item can be inserted into the cauldron
+        # Get total magimin values, default to 0 if item is None
+        total_magimin_values = np.array(
+            [
+                item.total_magimin_value if item is not None else 0
+                for item in self.all_ingredients
+            ]
+        )
+        # Check magimin constraint
+        magimin_ok = (
+            self.cauldron.current_total_magimin_amount + total_magimin_values
+        ) <= self.cauldron.max_total_magimin_allowed
+        # Check ingredient count
+        enough_of_item = self.num_ingredients[1:] > 0
+        # Combine all conditions (skip index 0, which is always legal)
+        mask = magimin_ok & enough_of_item
+        action_mask[1:] = mask
+        # Check if the cauldron is full
+        if self.cauldron.is_full():
+            action_mask = np.zeros_like(action_mask, dtype=np.int_)
+        # Set the None action (index 0) to be legal
+        action_mask[0] = 1
+        return action_mask
+
+    @property
+    def action_mask(self) -> np.ndarray:
+        """Get the action mask for the agent.
+
+        :return: A binary array indicating which actions are legal.
+        :rtype: np.ndarray
+        """
+        return self._calculate_action_mask()
+
+    def reset(
+        self, seed: Optional[int] = None, options: Dict[str, Any] = None
+    ) -> None:
         """Reset the environment.
 
         :param seed: An integer that 'seeds' the random number generator, defaults to None
@@ -606,7 +683,9 @@ class PotionomicsEnvironment(gym.Env):
         """
 
         super().reset(seed=seed)
-        self.current_ingredients = []
+        self.current_ingredients: np.ndarray = np.ascontiguousarray(
+            np.zeros(len(self.all_ingredients) + 1, dtype=np.int_)
+        )
         self.current_stability = PotionomicsPotionStability.CANNOTMAKE
         self.potion_tier = None
         self.current_base_price = 0
@@ -633,7 +712,9 @@ class PotionomicsEnvironment(gym.Env):
 
     def step(
         self, action: int
-    ) -> Tuple[List[Union[int, float]], SupportsFloat, bool, bool, Dict[str, Any]]:
+    ) -> Tuple[
+        List[Union[int, float]], SupportsFloat, bool, bool, Dict[str, Any]
+    ]:
         """Perform a step in the environment.
 
         :param action: The action the agent selected. In this case, an action corresponds to an ingredient that the agent selects to put into the cauldron.
@@ -644,17 +725,23 @@ class PotionomicsEnvironment(gym.Env):
 
         terminated: bool = False
         legal_move: int = 1
-        if self._action_to_ingredient[action]:
+        ingredient_to_insert: PotionomicsIngredient = (
+            self._action_to_ingredient[action]
+        )
+        if ingredient_to_insert:
             legal_move = self.insert_item(index_of_item_to_insert=action)
         terminate_episode = (
-            (action is None) or (not legal_move) or (self.cauldron.is_full())
+            (ingredient_to_insert is None)
+            or (not legal_move)
+            or (self.cauldron.is_full())
         )
         if terminate_episode:
             terminated = True
         if legal_move:
             reward = self._calculate_reward_function()
         else:
-            reward = -1
+            logger.warning("Illegal Move!")
+            reward = -1.0
         observation = self._get_obs()
         info = self._get_info()
         return observation, reward, terminated, False, info
@@ -681,8 +768,10 @@ class PotionomicsEnvironment(gym.Env):
             "current_recipe": self.recipe,
             "item_names": self._get_item_names_from_idx(),
             "current_recipe_ratios": self.calculate_current_magimin_ratios(),
-            "current_stability": self.current_stability,
-            "current_tier": self.potion_tier,
+            "current_stability": self.current_stability.name,
+            "current_tier": (
+                self.potion_tier.name if self.potion_tier else "None"
+            ),
             "current_traits": self.potion_traits,
             "current_base_price": self.current_base_price,
             "current_cost": self.cost_of_items,
@@ -690,9 +779,13 @@ class PotionomicsEnvironment(gym.Env):
 
 
 def get_env() -> PotionomicsEnvironment:
-    potionomics_items_file = "./potionomics_env/data/potionomics_ingredients.csv"
+    potionomics_items_file = (
+        "./potionomics_env/data/potionomics_ingredients.csv"
+    )
     potionomics_recipes_file = "./potionomics_env/data/potionomics_recipes.csv"
-    potionomics_cauldrons_file = "./potionomics_env/data/potionomics_cauldrons.csv"
+    potionomics_cauldrons_file = (
+        "./potionomics_env/data/potionomics_cauldrons.csv"
+    )
     all_ingredients: List[PotionomicsIngredient] = []
     with open(potionomics_items_file, "r") as _file:
         csv_data = [line for line in csv.DictReader(_file)]

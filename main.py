@@ -44,10 +44,13 @@ class ReplayMemory(object):
         return len(self.memory)
 
 
-if __name__ == "main":
+if __name__ == "__main__":
+    print("Starting RL training...")
     ### SETUP RL LOOP ###
     env = get_env()
-    Transition = namedtuple("Transition", ("state", "action", "next_state", "reward"))
+    Transition = namedtuple(
+        "Transition", ("state", "action", "next_state", "reward")
+    )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     BATCH_SIZE = 128
     GAMMA = 0.99
@@ -81,16 +84,26 @@ if __name__ == "main":
             -1.0 * steps_done / EPS_DECAY
         )
         steps_done += 1
+
+        # Use the environment's action masking function
+        action_mask = env._calculate_action_mask()
+        valid_actions = [i for i, valid in enumerate(action_mask) if valid]
+
         if sample > eps_threshold:
             with torch.no_grad():
-                # t.max(1) will return the largest column value of each row.
-                # second column on max result is index of where max element was
-                # found, so we pick action with the larger expected reward.
-                return policy_net(state).max(1)[1].view(1, 1)
+                q_values = policy_net(state)
+                # Mask invalid actions by setting their Q-values to -inf
+                mask = torch.tensor(
+                    action_mask, device=device, dtype=torch.bool
+                ).unsqueeze(0)
+                # Clone the Q-values and apply the mask
+                masked_q_values = q_values.clone()
+                masked_q_values[~mask] = float("-inf")
+                action = masked_q_values.max(1)[1].view(1, 1)
+                return action
         else:
-            return torch.tensor(
-                [[env.action_space.sample()]], device=device, dtype=torch.long
-            )
+            action = random.choice(valid_actions)
+            return torch.tensor([[action]], device=device, dtype=torch.long)
 
     def optimize_model():
         if len(memory) < BATCH_SIZE:
@@ -127,15 +140,19 @@ if __name__ == "main":
         # state value or 0 in case the state was final.
         next_state_values = torch.zeros(BATCH_SIZE, device=device)
         with torch.no_grad():
-            next_state_values[non_final_mask] = target_net(non_final_next_states).max(
-                1
-            )[0]
+            next_state_values[non_final_mask] = target_net(
+                non_final_next_states
+            ).max(1)[0]
         # Compute the expected Q values
-        expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+        expected_state_action_values = (
+            next_state_values * GAMMA
+        ) + reward_batch
 
         # Compute Huber loss
         criterion = nn.SmoothL1Loss()
-        loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+        loss = criterion(
+            state_action_values, expected_state_action_values.unsqueeze(1)
+        )
         # Optimize the model
         optimizer.zero_grad()
         loss.backward()
@@ -144,17 +161,24 @@ if __name__ == "main":
         optimizer.step()
 
     if torch.cuda.is_available():
-        num_episodes = 5000
+        num_episodes = 25000
     else:
         num_episodes = 50
 
     for i_episode in tqdm(range(num_episodes)):
         # Initialize the environment and get it's state
         state, info = env.reset()
-        state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+        state = torch.tensor(
+            state, dtype=torch.float32, device=device
+        ).unsqueeze(0)
         for t in count():
             action = select_action(state)
-            observation, reward, terminated, truncated, info = env.step(action.item())
+            # Perform the action in the environment and get the next state,
+            # reward, and done flag
+            observation, reward, terminated, truncated, info = env.step(
+                action.item()
+            )
+            # Convert the observation to a tensor
             reward = torch.tensor([reward], device=device)
             if reward > 0:
                 logger.debug(f"Reward: {reward.item()}")
@@ -166,6 +190,7 @@ if __name__ == "main":
                 logger.debug(f"Tier: {info['current_tier']}")
                 logger.debug(f"Base Price: {info['current_base_price']}")
                 logger.debug(f"Cost: {info['current_cost']}")
+                logger.debug(f"Ingredients: {info['item_names']}")
             done = terminated or truncated
 
             if terminated:
