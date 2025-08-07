@@ -769,6 +769,7 @@ conditional branches for calculating potion rank modification. Returning 0."
         observation = []
         ### Ingredient Information ###
         observation.extend(self.num_ingredients.tolist())
+        observation.extend(self.current_ingredients)
         ### Cauldron Information ###
         observation.extend(list(self.calculate_current_magimin_ratios()))
         observation.extend(self.recipe.magimin_ratios)
@@ -793,7 +794,11 @@ conditional branches for calculating potion rank modification. Returning 0."
             ),
             "current_traits": self.potion_traits,
             "current_cost": self.cost_of_items,
-            "expected_profit": self._calculate_potion_profit(),
+            "expected_profit": (
+                self._calculate_potion_profit()
+                if self.potion_tier != PotionomicsPotionStability.CANNOTMAKE
+                else 0
+            ),
         }
 
 
