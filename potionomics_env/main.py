@@ -469,17 +469,10 @@ class PotionomicsEnvironment(gym.Env):
         _potion_num_stars = potion_index - (
             _potion_tier * self.potion_magimin_thresholds_array.shape[0]
         )
-        logger.warning(f"Potion Rank: {_potion_tier} ({_potion_num_stars}*)")
-        self.potion_tier = PotionomicsPotionTier(
-            potion_index // self.potion_magimin_thresholds_array.shape[0]
-        )
-        row = potion_index // self.potion_magimin_thresholds_array.shape[0]
-        col = potion_index - (
-            row * self.potion_magimin_thresholds_array.shape[0]
-        )
+        self.potion_tier = PotionomicsPotionTier(_potion_tier)
         self.current_base_price = self.potion_prices_dict.get(self.recipe.name)[
-            row
-        ][col]
+            _potion_tier
+        ][_potion_num_stars]
 
     def calculate_current_magimin_ratios(self) -> np.ndarray:
         """Calculate the normalized magimin content of all ingredients in the cauldron.
