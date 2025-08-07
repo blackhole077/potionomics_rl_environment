@@ -5,9 +5,9 @@ data:
 
 # Configurations of the environment that may change per episode
 episode_cfg:
-  randomize_cauldron: false
-  randomize_recipe: false
-  randomize_ingredient_amount: false
+  randomize_cauldron: true
+  randomize_recipe: true
+  randomize_ingredient_amount: true
   # Index of the cauldron to use by default if randomize_cauldron is false
   default_cauldron_index: 0
   # Index of the recipe to use by default if randomize_recipe is false
@@ -17,11 +17,10 @@ episode_cfg:
 
 
 reward_cfg:
-  illegal_move_reward: -1.0
-  insufficient_items_in_cauldron_reward: -1.0
+  cannot_make_potion_reward: 0.0 # This covers potion stability being too low and insufficient items in cauldron.
   stability_reward:
-    - -1.0
-    - 0.0
+    - 0.0 # This index is not expected to be used, it is just to keep in-line with the Enum
+    - 0.25
     - 0.5
-    - 0.8
+    - 0.75
     - 1.0

@@ -68,13 +68,8 @@ class PotionomicsEnvironment(gym.Env):
         self.all_recipes = all_recipes
         self.all_cauldrons = all_cauldrons
         self.env_cfg = environment_config
-        # Configure the environment
-        self.configure_environment()
-        self.current_ingredients: List[int] = []
-        self.current_stability = PotionomicsPotionStability.CANNOTMAKE
-        self.stability_rewards: List[float] = [0.0, 0.25, 0.5, 0.75, 1.0]
-        self.potion_tier: PotionomicsPotionTier = None
-        self.potion_traits: np.ndarray = np.zeros((5,))
+        # Initialize the environment
+        self.reset()
         self.potion_magimin_thresholds_array = np.array(
             [
                 [0, 10, 20, 30, 40, 50],
@@ -86,8 +81,6 @@ class PotionomicsEnvironment(gym.Env):
             ],
             order="C",
         )
-        self.current_base_price: int = 0
-        self.cost_of_items: int = 0
         self.potion_prices_dict: Dict[str, np.ndarray] = {
             "Health_Potion": np.array(
                 [
@@ -326,11 +319,6 @@ class PotionomicsEnvironment(gym.Env):
         # handle dynamic observation sizes
         # (if you include them in the observation)
         if self.env_cfg.episode_cfg.randomize_cauldron:
-            logger.warning(
-                f"If using randomized cauldrons, make sure that you encode the \
-observation to be fixed-length, otherwise you'll have problems if you include \
-the cauldron contents in the observation."
-            )
             self.cauldron: PotionomicsCauldron = self.all_cauldrons[
                 np.random.choice(len(self.all_cauldrons), 1)[0]
             ].model_copy(deep=True)
@@ -361,6 +349,10 @@ the cauldron contents in the observation."
                 * (len(self.all_ingredients) + 1)
             )
         self.num_ingredients[0] = 0  # Set the None action to have 0
+        self.stability_reward = self.env_cfg.reward_cfg.stability_reward
+        self.cannot_make_potion_reward = (
+            self.env_cfg.reward_cfg.cannot_make_potion_reward
+        )
 
     def insert_item(self, index_of_item_to_insert: int) -> int:
         """Attempt to insert an item into the cauldron.
@@ -615,7 +607,7 @@ the cauldron contents in the observation."
         :rtype: float
         """
 
-        return self.stability_rewards[self.current_stability.value]
+        return self.stability_reward[self.current_stability.value]
 
     def _calculate_reward_function(self) -> torch.Tensor:
         """Internal function that calculates the reward.
@@ -630,9 +622,7 @@ the cauldron contents in the observation."
             self.cauldron.current_num_items < 2
             or self.current_stability == PotionomicsPotionStability.CANNOTMAKE
         ):
-            return (
-                reward  # No reward for not having enough items in the cauldron
-            )
+            self.cannot_make_potion_reward
         else:
             self.calculate_potion_rank_and_price()
             # The higher stability, the better
@@ -646,7 +636,6 @@ the cauldron contents in the observation."
                 (1.0 - cumulative_delta)
                 * (self.cauldron.get_percent_full_magimin())
             ) + stability_bonus  # + price_vs_cost
-            # reward = float(np.clip(reward, -1.0, 1.0))
         return reward
 
     def _calculate_action_mask(self) -> np.ndarray:
@@ -714,9 +703,9 @@ the cauldron contents in the observation."
             np.zeros(len(self.all_ingredients) + 1, dtype=np.int_)
         )
         self.current_stability = PotionomicsPotionStability.CANNOTMAKE
-        self.potion_tier = None
-        self.current_base_price = 0
-        self.cost_of_items = 0
+        self.potion_tier: PotionomicsPotionTier = None
+        self.current_base_price: int = 0
+        self.cost_of_items: int = 0
         self.potion_traits: np.ndarray = np.zeros((5,))
         self.configure_environment()
         observation = self._get_obs()
