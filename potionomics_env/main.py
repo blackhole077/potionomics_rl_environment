@@ -560,7 +560,7 @@ class PotionomicsEnvironment(gym.Env):
         """
 
         ingredients: List[int] = []
-        for ingredient_idx in np.unique(self.current_ingredients):
+        for ingredient_idx in np.nonzero(self.current_ingredients)[0]:
             ingredient: PotionomicsIngredient = self._action_to_ingredient[
                 ingredient_idx
             ]
@@ -581,7 +581,8 @@ class PotionomicsEnvironment(gym.Env):
 
         Traits are likely calculated with the following steps:
             1. Non-neutral traits on ingredients with lower magimin totals are overridden by non-neutral traits with higher magimin totals.
-            2. If two or more ingredients have the same magimin total, any overlapping traits are determined by uniform sampling. What remains unclear is whether multiple copies of a particular ingredient would influence the sampling or not.
+            2. If two or more ingredients have the same magimin total, any overlapping traits are determined by uniform sampling.
+                It is unclear if multiple copies of the same ingredient affects the sampling.
         """
 
         current_ingredient_traits = self._get_current_ingredient_traits()
@@ -627,6 +628,7 @@ class PotionomicsEnvironment(gym.Env):
             self.calculate_potion_rank_and_price()
             # The higher stability, the better
             stability_bonus = self.calculate_stability_bonus()
+            self.calculate_potion_traits()
             logger.debug(
                 f"Reward calculation: (1.0 - cumulative_delta)={1.0 - cumulative_delta:.4f}, "
                 f"percent_full_magimin={self.cauldron.get_percent_full_magimin():.4f}, "
