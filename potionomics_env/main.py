@@ -422,6 +422,26 @@ class PotionomicsEnvironment(gym.Env):
             )
             return 0
 
+    def _calculate_stability_star_modifier(self) -> int:
+        """Calculate how many stars are gained or lost based on the potion's
+        stability.
+
+        Since the game does not provide the specific percentage chance of star
+        loss/gain, this assumes a 50% chance.
+
+        :return: The number of stars to increment or decrement by.
+        :rtype: int
+        """
+
+        if self.current_stability == PotionomicsPotionStability.UNSTABLE:
+            return np.random.choice([-1, 0], p=[0.5, 0.5])
+        elif self.current_stability == PotionomicsPotionStability.STABLE:
+            return 1
+        elif self.current_stability == PotionomicsPotionStability.VERYSTABLE:
+            return 1 + np.random.choice([0, 1], p=[0.5, 0.5])
+        elif self.current_stability == PotionomicsPotionStability.PERFECT:
+            return 2 + np.random.choice([0, 1], p=[0.5, 0.5])
+
     def calculate_potion_rank_and_price(self) -> None:
         """Calculate the rank and price of the potion.
 
@@ -436,9 +456,20 @@ class PotionomicsEnvironment(gym.Env):
             self.potion_magimin_thresholds_array.flatten(),
             self.cauldron.current_total_magimin_amount,
         )
+        # Incorporate (in)stability into potion rank
+        stability_modifier = self._calculate_stability_star_modifier()
+        potion_index += stability_modifier
+
         if potion_index >= self.potion_magimin_thresholds_array.size:
             potion_index -= 1  # Need to make sure we stay in bounds
 
+        _potion_tier = (
+            potion_index // self.potion_magimin_thresholds_array.shape[0]
+        )
+        _potion_num_stars = potion_index - (
+            _potion_tier * self.potion_magimin_thresholds_array.shape[0]
+        )
+        logger.warning(f"Potion Rank: {_potion_tier} ({_potion_num_stars}*)")
         self.potion_tier = PotionomicsPotionTier(
             potion_index // self.potion_magimin_thresholds_array.shape[0]
         )
