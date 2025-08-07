@@ -354,7 +354,7 @@ class PotionomicsEnvironment(gym.Env):
             self.env_cfg.reward_cfg.cannot_make_potion_reward
         )
 
-    def insert_item(self, index_of_item_to_insert: int) -> int:
+    def insert_item(self, index_of_item_to_insert: int) -> None:
         """Attempt to insert an item into the cauldron.
 
         Three conditions must be satisfied for the item to be inserted into the cauldron:
@@ -364,8 +364,6 @@ class PotionomicsEnvironment(gym.Env):
 
         :param index_of_item_to_insert: The integer corresponding to the item to insert into the cauldron.
         :type index_of_item_to_insert: int
-        :return: An integer indicating whether the item was inserted into the cauldron successfully. Used in calculating the reward.
-        :rtype: int
         """
 
         item_to_insert: PotionomicsIngredient = self._action_to_ingredient[
@@ -409,18 +407,6 @@ class PotionomicsEnvironment(gym.Env):
             self.current_ingredients[index_of_item_to_insert] += 1
             self.cost_of_items += item_to_insert.item_price
             self.num_ingredients[index_of_item_to_insert] -= 1
-            return 1
-        else:
-            logger.debug(
-                f"""
-            Not Legal Because:
-            Enough Space?: {len(self.current_ingredients) < self.cauldron.max_num_items_allowed}
-            Enough of Item?: {has_enough_of_item}
-            Passes Magimin Check?: {magimin_check}
-            Item to Insert?: {item_to_insert}
-            """
-            )
-            return 0
 
     def _calculate_stability_star_modifier(self) -> int:
         """Calculate how many stars are gained or lost based on the potion's
@@ -441,6 +427,12 @@ class PotionomicsEnvironment(gym.Env):
             return 1 + np.random.choice([0, 1], p=[0.5, 0.5])
         elif self.current_stability == PotionomicsPotionStability.PERFECT:
             return 2 + np.random.choice([0, 1], p=[0.5, 0.5])
+        else:
+            logger.warning(
+                f"Potion Stability {self.current_stability} is not present in \
+conditional branches for calculating potion rank modification. Returning 0."
+            )
+            return 0
 
     def calculate_potion_rank_and_price(self) -> None:
         """Calculate the rank and price of the potion.
@@ -459,10 +451,12 @@ class PotionomicsEnvironment(gym.Env):
         # Incorporate (in)stability into potion rank
         stability_modifier = self._calculate_stability_star_modifier()
         potion_index += stability_modifier
-
-        if potion_index >= self.potion_magimin_thresholds_array.size:
-            potion_index -= 1  # Need to make sure we stay in bounds
-
+        # Bounds enforcement (int typecast just in case)
+        potion_index = int(
+            np.clip(
+                potion_index, 0, self.potion_magimin_thresholds_array.size - 1
+            )
+        )
         _potion_tier = (
             potion_index // self.potion_magimin_thresholds_array.shape[0]
         )
@@ -754,20 +748,16 @@ class PotionomicsEnvironment(gym.Env):
         """
 
         terminated: bool = False
-        legal_move: int = 1
         ingredient_to_insert: PotionomicsIngredient = (
             self._action_to_ingredient[action]
         )
         if ingredient_to_insert:
-            legal_move = self.insert_item(index_of_item_to_insert=action)
-        terminate_episode = (
-            (ingredient_to_insert is None)
-            or (not legal_move)
-            or (self.cauldron.is_full())
+            self.insert_item(index_of_item_to_insert=action)
+        terminate_episode = (ingredient_to_insert is None) or (
+            self.cauldron.is_full()
         )
         if terminate_episode:
             terminated = True
-        if legal_move:
             reward = self._calculate_reward_function()
         else:
             reward = 0
