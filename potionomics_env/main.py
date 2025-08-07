@@ -1,9 +1,11 @@
 import csv
+from pathlib import Path
 from typing import Any, Dict, List, Optional, SupportsFloat, Tuple, Union
 
 import gymnasium as gym
 import logging
 import numpy as np
+from omegaconf import DictConfig
 import torch
 
 from potionomics_env.potionomics_enum import PotionomicsPotionStability
@@ -13,9 +15,9 @@ from potionomics_env.schemas import (
     PotionomicsIngredient,
     PotionomicsPotionRecipe,
 )
+import hydra
 
-# This is a placeholder value to ensure that all observations are the correct length. If you choose to encode the state information to ensure fixed-length then this would no longer be necessary.
-POTIONOMICS_MAX_ITEMS_IN_CAULDRON = 14
+ENV_ROOT = Path(__file__).parent.absolute()
 logger = logging.getLogger(__name__)
 
 
@@ -60,34 +62,15 @@ class PotionomicsEnvironment(gym.Env):
         all_ingredients: List[PotionomicsIngredient],
         all_recipes: List[PotionomicsPotionRecipe],
         all_cauldrons: List[PotionomicsCauldron],
+        environment_config: DictConfig,
     ):
         self.all_ingredients = all_ingredients
         self.all_recipes = all_recipes
         self.all_cauldrons = all_cauldrons
-        # BUG: Basically since each cauldron has different amounts of things you can put in, the size of the observation wouldn't be the same. So for now we're not dealing with that since we'd need to encode the state.
-        # self.cauldron: PotionomicsCauldron = self.all_cauldrons[
-        #     np.random.choice(len(self.all_cauldrons), 1)[0]
-        # ].model_copy(deep=True)
-        self.cauldron: PotionomicsCauldron = self.all_cauldrons[-1]
-        self.cauldron.setup()
-        # self.recipe: PotionomicsPotionRecipe = self.all_recipes[
-        #     np.random.choice(len(self.all_recipes), 1)[0]
-        # ]
-        self.recipe: PotionomicsPotionRecipe = self.all_recipes[
-            np.random.choice(len(self.all_recipes), 1)[0]
-        ]
-        self.num_ingredients: np.ndarray = np.ascontiguousarray(
-            np.random.randint(
-                low=0,
-                high=self.cauldron.max_num_items_allowed + 1,
-                size=len(self.all_ingredients) + 1,
-            )
-        )
-        self.num_ingredients[0] = 0  # Set the None action to have 0
-        # print(f"Number of Ingredients: {len(all_ingredients)}")
-        self.current_ingredients: np.ndarray = np.ascontiguousarray(
-            np.zeros(shape=(len(self.all_ingredients) + 1,), dtype=np.int_)
-        )
+        self.env_cfg = environment_config
+        # Configure the environment
+        self.configure_environment()
+        self.current_ingredients: List[int] = []
         self.current_stability = PotionomicsPotionStability.CANNOTMAKE
         self.stability_rewards: List[float] = [0.0, 0.25, 0.5, 0.75, 1.0]
         self.potion_tier: PotionomicsPotionTier = None
@@ -327,12 +310,57 @@ class PotionomicsEnvironment(gym.Env):
                 order="C",
             ),
         }
-        ### GYM-SPECIFIC INTIALIZATIONS ###
+        ### GYM-SPECIFIC INITIALIZATIONS ###
         self.action_space = gym.spaces.Discrete(len(all_ingredients) + 1)
         self._action_to_ingredient: Dict[int, PotionomicsIngredient] = dict(
             zip(np.arange(1, len(all_ingredients) + 1), self.all_ingredients)
         )
         self._action_to_ingredient[0] = None
+
+    def configure_environment(self) -> None:
+        """Configure the environment to use fixed or randomized elements.
+        Both environment initialization and reset call this function.
+        """
+
+        # BUG: Random cauldrons will break models that don't have a way to
+        # handle dynamic observation sizes
+        # (if you include them in the observation)
+        if self.env_cfg.episode_cfg.randomize_cauldron:
+            logger.warning(
+                f"If using randomized cauldrons, make sure that you encode the \
+observation to be fixed-length, otherwise you'll have problems if you include \
+the cauldron contents in the observation."
+            )
+            self.cauldron: PotionomicsCauldron = self.all_cauldrons[
+                np.random.choice(len(self.all_cauldrons), 1)[0]
+            ].model_copy(deep=True)
+        else:
+            self.cauldron: PotionomicsCauldron = self.all_cauldrons[
+                self.env_cfg.episode_cfg.default_cauldron_index
+            ]
+        self.cauldron.setup()
+        if self.env_cfg.episode_cfg.randomize_recipe:
+            self.recipe: PotionomicsPotionRecipe = self.all_recipes[
+                np.random.choice(len(self.all_recipes), 1)[0]
+            ]
+        else:
+            self.recipe: PotionomicsPotionRecipe = self.all_recipes[
+                self.env_cfg.episode_cfg.default_recipe_index
+            ]
+        if self.env_cfg.episode_cfg.randomize_ingredient_amount:
+            self.num_ingredients: np.ndarray = np.ascontiguousarray(
+                np.random.randint(
+                    low=0,
+                    high=self.cauldron.max_num_items_allowed + 1,
+                    size=len(self.all_ingredients) + 1,
+                )
+            )
+        else:
+            self.num_ingredients = np.ascontiguousarray(
+                [self.env_cfg.episode_cfg.default_ingredient_amount]
+                * (len(self.all_ingredients) + 1)
+            )
+        self.num_ingredients[0] = 0  # Set the None action to have 0
 
     def insert_item(self, index_of_item_to_insert: int) -> int:
         """Attempt to insert an item into the cauldron.
@@ -366,7 +394,6 @@ class PotionomicsEnvironment(gym.Env):
             self.current_ingredients.sum() < self.cauldron.max_num_items_allowed
             and has_enough_of_item
             and magimin_check
-            and item_to_insert is not None
         ):
             self.cauldron.current_a_magimin_amount += (
                 item_to_insert.a_magimin_value
@@ -390,8 +417,6 @@ class PotionomicsEnvironment(gym.Env):
             self.current_ingredients[index_of_item_to_insert] += 1
             self.cost_of_items += item_to_insert.item_price
             self.num_ingredients[index_of_item_to_insert] -= 1
-            # if self.num_ingredients[index_of_item_to_insert] < 1:
-            #     logger.warning(f"{item_to_insert.name} has no more stock.")
             return 1
         else:
             logger.debug(
@@ -693,23 +718,7 @@ class PotionomicsEnvironment(gym.Env):
         self.current_base_price = 0
         self.cost_of_items = 0
         self.potion_traits: np.ndarray = np.zeros((5,))
-        self.num_ingredients: np.ndarray = np.ascontiguousarray(
-            np.random.randint(
-                low=0,
-                high=self.cauldron.max_num_items_allowed + 1,
-                size=len(self.all_ingredients) + 1,
-            )
-        )
-        self.num_ingredients[0] = 0  # Set the None action to have 0
-        # NOTE: We need to execute model_copy() because otherwise the information isn't cleared out
-        # self.cauldron: PotionomicsCauldron = self.all_cauldrons[
-        #     np.random.choice(len(self.all_recipes), 1)[0]
-        # ].model_copy(deep=True)
-        self.cauldron: PotionomicsCauldron = self.all_cauldrons[-1]
-        self.cauldron.setup()
-        self.recipe = self.all_recipes[
-            np.random.choice(len(self.all_recipes), 1)[0]
-        ]
+        self.configure_environment()
         observation = self._get_obs()
         info = self._get_info()
         return observation, info
@@ -744,8 +753,7 @@ class PotionomicsEnvironment(gym.Env):
         if legal_move:
             reward = self._calculate_reward_function()
         else:
-            logger.warning("Illegal Move!")
-            reward = -1.0
+            reward = 0
         observation = self._get_obs()
         info = self._get_info()
         return observation, reward, terminated, False, info
@@ -783,22 +791,27 @@ class PotionomicsEnvironment(gym.Env):
 
 
 def get_env() -> PotionomicsEnvironment:
-    potionomics_items_file = (
-        "./potionomics_env/data/potionomics_ingredients.csv"
-    )
-    potionomics_recipes_file = "./potionomics_env/data/potionomics_recipes.csv"
-    potionomics_cauldrons_file = (
-        "./potionomics_env/data/potionomics_cauldrons.csv"
-    )
+    with hydra.initialize(
+        version_base=None,
+        config_path="config",
+        job_name="potionomics_env_setup",
+    ):
+        env_cfg = hydra.compose(config_name="config")
+        potionomics_cauldrons_file = env_cfg.data.potionomics_cauldrons
+        potionomics_items_file = env_cfg.data.potionomics_ingredients
+        potionomics_recipes_file = env_cfg.data.potionomics_recipes
+
     all_ingredients: List[PotionomicsIngredient] = []
-    with open(potionomics_items_file, "r") as _file:
+    with open(Path(ENV_ROOT, potionomics_items_file).as_posix(), "r") as _file:
         csv_data = [line for line in csv.DictReader(_file)]
         for entry in csv_data:
             item = PotionomicsIngredient(**entry)
             all_ingredients.append(item)
 
     all_recipes: List[PotionomicsPotionRecipe] = []
-    with open(potionomics_recipes_file, "r") as _file:
+    with open(
+        Path(ENV_ROOT, potionomics_recipes_file).as_posix(), "r"
+    ) as _file:
         csv_data = [line for line in csv.DictReader(_file)]
         for entry in csv_data:
             item = PotionomicsPotionRecipe(**entry)
@@ -807,7 +820,9 @@ def get_env() -> PotionomicsEnvironment:
             all_recipes.append(item)
 
     all_cauldrons: List[PotionomicsCauldron] = []
-    with open(potionomics_cauldrons_file, "r") as _file:
+    with open(
+        Path(ENV_ROOT, potionomics_cauldrons_file).as_posix(), "r"
+    ) as _file:
         csv_data = [line for line in csv.DictReader(_file)]
         for entry in csv_data:
             item = PotionomicsCauldron(**entry)
@@ -818,5 +833,6 @@ def get_env() -> PotionomicsEnvironment:
         all_ingredients=all_ingredients,
         all_recipes=all_recipes,
         all_cauldrons=all_cauldrons,
+        environment_config=env_cfg,
     )
     return env
