@@ -152,4 +152,4 @@ This formula is straightforward, yet it still provides meaningful rewards for pr
 
 #### Percent of Cauldron Used
 
-Raising potion quality relies heavily on filling up the cauldron's magimin capacity as much as possible. Therefore, the agent should be given incentive to do the same, while still focusing on creating functional potions. This equation: $cauldron\_fullness=\Sigma(Magimins_{ingredients})/Cauldron_{MagaminCapcity}$ is multiplied against the cumulative delta to try and encourage the agent to balance both aspects equally.
+Raising potion quality relies heavily on filling up the cauldron's magimin capacity as much as possible. Therefore, the agent should be given incentive to do the same, while still focusing on creating functional potions. This equation: $cauldron\_fullness=\Sigma(Magimins_{ingredients})/Cauldron_{MagiminCapcity}$ is multiplied against the cumulative delta to try and encourage the agent to balance both aspects equally.
