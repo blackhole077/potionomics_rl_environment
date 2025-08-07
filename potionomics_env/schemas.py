@@ -92,7 +92,7 @@ class PotionomicsPotionRecipe(BaseModel):
 
     def calculate_magimin_ratios_int(self):
         """Compile the magimin ratios as integers.
-        Used by get_percent_full_magamin
+        Used by get_percent_full_magimin
         """
         self.magimin_ratios_int = np.ascontiguousarray(
             np.array(
@@ -200,8 +200,8 @@ class PotionomicsCauldron(BaseModel):
 
         return self.current_num_items >= self.max_num_items_allowed
 
-    def get_percent_full_magamin(self) -> float:
-        """Get the amount of magamins in the cauldron as a percentage.
+    def get_percent_full_magimin(self) -> float:
+        """Get the amount of magimins in the cauldron as a percentage.
 
         :return: A floating-point value in the range [0, 1].
         :rtype: float

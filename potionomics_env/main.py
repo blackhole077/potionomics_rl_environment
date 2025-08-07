@@ -614,12 +614,12 @@ class PotionomicsEnvironment(gym.Env):
             stability_bonus = self.calculate_stability_bonus()
             logger.debug(
                 f"Reward calculation: (1.0 - cumulative_delta)={1.0 - cumulative_delta:.4f}, "
-                f"percent_full_magamin={self.cauldron.get_percent_full_magamin():.4f}, "
+                f"percent_full_magimin={self.cauldron.get_percent_full_magimin():.4f}, "
                 f"stability_bonus={stability_bonus:.4f}"
             )
             reward = (
                 (1.0 - cumulative_delta)
-                * (self.cauldron.get_percent_full_magamin())
+                * (self.cauldron.get_percent_full_magimin())
             ) + stability_bonus  # + price_vs_cost
             # reward = float(np.clip(reward, -1.0, 1.0))
         return reward
