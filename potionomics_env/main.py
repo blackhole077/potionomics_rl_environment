@@ -13,6 +13,7 @@ from potionomics_env.potionomics_enum import PotionomicsPotionTier
 from potionomics_env.schemas import (
     PotionomicsCauldron,
     PotionomicsIngredient,
+    PotionomicsPotion,
     PotionomicsPotionRecipe,
 )
 import hydra
@@ -464,6 +465,7 @@ conditional branches for calculating potion rank modification. Returning 0."
             _potion_tier * self.potion_magimin_thresholds_array.shape[0]
         )
         self.potion_tier = PotionomicsPotionTier(_potion_tier)
+        self.potion_num_stars = _potion_num_stars
         self.current_base_price = self.potion_prices_dict.get(self.recipe.name)[
             _potion_tier
         ][_potion_num_stars]
@@ -726,6 +728,7 @@ conditional branches for calculating potion rank modification. Returning 0."
         )
         self.current_stability = PotionomicsPotionStability.CANNOTMAKE
         self.potion_tier: PotionomicsPotionTier = None
+        self.potion_num_stars = -1
         self.current_base_price: int = -1
         self.cost_of_items: int = 0
         self.potion_traits: np.ndarray = np.zeros((5,))
@@ -798,6 +801,17 @@ conditional branches for calculating potion rank modification. Returning 0."
                 self._calculate_potion_profit()
                 if self.potion_tier != PotionomicsPotionStability.CANNOTMAKE
                 else 0
+            ),
+            "final_potion": (
+                PotionomicsPotion(
+                    Name=self.recipe.name,
+                    Type=self.recipe.potion_type,
+                    Rank=self.potion_tier,
+                    Stars=self.potion_num_stars,
+                    Price=self.current_base_price,
+                )
+                if self.potion_tier != PotionomicsPotionStability.CANNOTMAKE
+                else None
             ),
         }
 

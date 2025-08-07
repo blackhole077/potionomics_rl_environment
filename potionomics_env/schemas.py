@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from potionomics_env.potionomics_enum import (
     PotionomicsIngredientType,
     PotionomicsPotionRecipeType,
+    PotionomicsPotionTier,
 )
 import numpy as np
 
@@ -222,3 +223,45 @@ D: {self.current_d_magimin_amount}
 E: {self.current_e_magimin_amount}
 Total: {self.current_total_magimin_amount}/{self.max_total_magimin_allowed}
         """
+
+
+class PotionomicsPotion(BaseModel):
+
+    potion_name: str = Field(alias="Name")
+    potion_type: PotionomicsPotionRecipeType = Field(alias="Type")
+    potion_rank: Optional[PotionomicsPotionTier] = Field(alias="Rank")
+    potion_star: int = Field(alias="Stars")
+    potion_base_price: int = Field(alias="Price")
+
+    def __repr__(self):
+        return f"""
+Potion Name: {self.potion_name}\tType: {self.potion_type}
+Potion Rank: {self.potion_rank.value} ({self.potion_star} stars)
+Base Price: {self.potion_base_price}\n
+"""
+
+    def contest_potion_comparison(
+        self, contest_potion: "PotionomicsPotion"
+    ) -> bool:
+        passes: bool = True
+        if self.potion_name != contest_potion.potion_name:
+            print("Failed because names do not match")
+            passes = False
+        if self.potion_type != contest_potion.potion_type:
+            print("Failed because types do not match")
+            passes = False
+        if (
+            self.potion_rank is None
+            or self.potion_rank < contest_potion.potion_rank
+        ):
+            print("Failed because Potion rank is either None or isn't high enough")
+            passes = False
+        elif self.potion_star < contest_potion.potion_star:
+            print("Failed due to insufficient stars")
+            passes = False
+        else:
+            pass
+        if self.potion_base_price < contest_potion.potion_base_price:
+            print("Failed because price isn't high enough")
+            passes = False
+        return passes
