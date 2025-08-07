@@ -610,6 +610,13 @@ class PotionomicsEnvironment(gym.Env):
 
         return self.stability_reward[self.current_stability.value]
 
+    def _calculate_potion_profit(self) -> float:
+        trait_modifier = 1 + (0.05 * np.sum(self.potion_traits))
+        amount_brewed = self.cauldron.current_num_items // 2
+        return (
+            amount_brewed * (self.current_base_price * trait_modifier)
+        ) - self.cost_of_items
+
     def _calculate_reward_function(self) -> torch.Tensor:
         """Internal function that calculates the reward.
 
@@ -629,15 +636,10 @@ class PotionomicsEnvironment(gym.Env):
             # The higher stability, the better
             stability_bonus = self.calculate_stability_bonus()
             self.calculate_potion_traits()
-            logger.debug(
-                f"Reward calculation: (1.0 - cumulative_delta)={1.0 - cumulative_delta:.4f}, "
-                f"percent_full_magimin={self.cauldron.get_percent_full_magimin():.4f}, "
-                f"stability_bonus={stability_bonus:.4f}"
-            )
             reward = (
                 (1.0 - cumulative_delta)
                 * (self.cauldron.get_percent_full_magimin())
-            ) + stability_bonus  # + price_vs_cost
+            ) + stability_bonus
         return reward
 
     def _calculate_action_mask(self) -> np.ndarray:
@@ -706,7 +708,7 @@ class PotionomicsEnvironment(gym.Env):
         )
         self.current_stability = PotionomicsPotionStability.CANNOTMAKE
         self.potion_tier: PotionomicsPotionTier = None
-        self.current_base_price: int = 0
+        self.current_base_price: int = -1
         self.cost_of_items: int = 0
         self.potion_traits: np.ndarray = np.zeros((5,))
         self.configure_environment()
@@ -776,8 +778,8 @@ class PotionomicsEnvironment(gym.Env):
                 self.potion_tier.name if self.potion_tier else "None"
             ),
             "current_traits": self.potion_traits,
-            "current_base_price": self.current_base_price,
             "current_cost": self.cost_of_items,
+            "expected_profit": self._calculate_potion_profit(),
         }
 
 
