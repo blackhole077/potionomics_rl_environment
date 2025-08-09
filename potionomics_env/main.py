@@ -355,6 +355,17 @@ class PotionomicsEnvironment(gym.Env):
             self.env_cfg.reward_cfg.cannot_make_potion_reward
         )
 
+    def update_environment(self, hydra_overrides: List[str]) -> None:
+        with hydra.initialize(
+            version_base=None,
+            config_path="config",
+            job_name="potionomics_env_setup",
+        ):
+            self.env_cfg = hydra.compose(
+                config_name="config", overrides=hydra_overrides
+            )
+        self.configure_environment()
+
     def insert_item(self, index_of_item_to_insert: int) -> None:
         """Attempt to insert an item into the cauldron.
 
@@ -814,6 +825,18 @@ conditional branches for calculating potion rank modification. Returning 0."
                 else None
             ),
         }
+
+    def get_cauldron_from_name(self, cauldron_name: str) -> PotionomicsCauldron:
+        for _cauldron in self.all_cauldrons:
+            if _cauldron.name == cauldron_name:
+                return _cauldron
+
+    def get_potion_recipe_from_name(
+        self, potion_name: str
+    ) -> Tuple[int, PotionomicsPotionRecipe]:
+        for index, _recipe in enumerate(self.all_recipes):
+            if _recipe.name == potion_name:
+                return index, _recipe
 
 
 def get_env() -> PotionomicsEnvironment:

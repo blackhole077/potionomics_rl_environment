@@ -2,10 +2,11 @@ from collections import deque
 from collections import namedtuple
 from itertools import count
 import math
+from pathlib import Path
 import random
 
 import logging
-import sys
+from typing import List, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -13,11 +14,14 @@ import torch.optim as optim
 from tqdm import tqdm
 
 from potionomics_env.main import get_env
-from potionomics_env.schemas import PotionomicsPotion
-from potionomics_env.potionomics_enum import (
-    PotionomicsPotionRecipeType,
-    PotionomicsPotionTier,
+from potionomics_env.potionomics_test_cases import (
+    generate_corsac_contest_potions,
+    generate_finn_contest_potions,
+    generate_roxanne_contest_potions,
+    generate_anuberia_contest_potions,
+    generate_robin_contest_potions,
 )
+from potionomics_env.schemas import PotionomicsPotion
 
 logger = logging.getLogger(__name__)
 logging.addLevelName(30, "SUCCESS")
@@ -52,6 +56,13 @@ class DQN(nn.Module):
         x = F.relu(self.layer2(x))
         return self.layer3(x)
 
+    def save(self, path: Union[str, Path]) -> None:
+        torch.save(self.state_dict(), path)
+
+    def load(self, path: Union[str, Path]) -> None:
+        _state_dict = torch.load(path, map_location=device)
+        self.load_state_dict(_state_dict, strict=True)
+
 
 class ReplayMemory(object):
     def __init__(self, capacity):
@@ -68,7 +79,7 @@ class ReplayMemory(object):
         return len(self.memory)
 
 
-def select_action(state: torch.Tensor, policy_net: DQN, is_testing=False):
+def select_action(state: torch.Tensor, policy_net: DQN):
     global steps_done
     sample = random.random()
     eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(
@@ -79,19 +90,6 @@ def select_action(state: torch.Tensor, policy_net: DQN, is_testing=False):
     # Use the environment's action masking function
     action_mask = ENV._calculate_action_mask()
     valid_actions = [i for i, valid in enumerate(action_mask) if valid]
-
-    if is_testing:
-        with torch.no_grad():
-            q_values = policy_net(state)
-            # Mask invalid actions by setting their Q-values to -inf
-            mask = torch.tensor(
-                action_mask, device=device, dtype=torch.bool
-            ).unsqueeze(0)
-            # Clone the Q-values and apply the mask
-            masked_q_values = q_values.clone()
-            masked_q_values[~mask] = float("-inf")
-            action = masked_q_values.max(1)[1].view(1, 1)
-            return action
 
     if sample > eps_threshold:
         with torch.no_grad():
@@ -245,6 +243,62 @@ def run_rl_loop(
         logger.log(35, f"Rewards: {_rewards}")
 
 
+def select_action_greedy(state: torch.Tensor, policy_net: DQN):
+    action_mask = ENV._calculate_action_mask()
+    with torch.no_grad():
+        q_values = policy_net(state)
+        # Mask invalid actions by setting their Q-values to -inf
+        mask = torch.tensor(
+            action_mask, device=device, dtype=torch.bool
+        ).unsqueeze(0)
+        # Clone the Q-values and apply the mask
+        masked_q_values = q_values.clone()
+        masked_q_values[~mask] = float("-inf")
+        action = masked_q_values.max(1)[1].view(1, 1)
+        return action
+
+
+def contest_loop(contest_potion: PotionomicsPotion, num_attempts: int = 100):
+    logger.log(30, f"Contest Potion: {contest_potion}")
+    for i_episode in tqdm(range(num_attempts)):
+        # Initialize the environment and get it's state
+        state, info = ENV.reset()
+        state = torch.tensor(
+            state, dtype=torch.float32, device=device
+        ).unsqueeze(0)
+        for t in count():
+            action = select_action_greedy(state, policy_net)
+            # Perform the action in the environment and get the next state,
+            # reward, and done flag
+            observation, reward, terminated, truncated, info = ENV.step(
+                action.item()
+            )
+            # Convert the observation to a tensor
+            reward = torch.tensor([reward], device=device)
+            done = terminated or truncated
+
+            if terminated:
+                next_state = None
+            else:
+                next_state = torch.tensor(
+                    observation, dtype=torch.float32, device=device
+                ).unsqueeze(0)
+            if done:
+                _potion: PotionomicsPotion = info["final_potion"]
+                if _potion is not None and _potion.contest_potion_comparison(
+                    contest_potion
+                ):
+                    logger.log(
+                        35,
+                        f"\nPotion {_potion} Passed the contest requirements\nTotal Attempts: {i_episode}",
+                    )
+                    return True
+                break  # Exit loop when done
+            else:
+                # Move to the next state
+                state = next_state
+
+
 if __name__ == "__main__":
     print("Starting RL training...")
     # Get number of actions from gym action space
@@ -265,55 +319,59 @@ if __name__ == "__main__":
     steps_done = 0
 
     if torch.cuda.is_available():
-        num_episodes = 5000
+        num_episodes = 25000
     else:
         num_episodes = 50
 
-    run_rl_loop(policy_net, target_net, memory, num_episodes)
-
+    # run_rl_loop(policy_net, target_net, memory, num_episodes)
+    # logger.log(30, "Saving model to path")
+    path = "potionomics_agent.pth"
+    policy_net.load(path)
     logger.log(35, "Testing RL Agent...")
-    contest_potion = PotionomicsPotion(
-        Name="Health_Potion",
-        Type=PotionomicsPotionRecipeType.BASIC,
-        Rank=PotionomicsPotionTier.COMMON,
-        Stars=0,
-        Price=72,
+    roxanne_contest_potions: List[PotionomicsPotion] = (
+        generate_roxanne_contest_potions()
     )
     policy_net.eval()
     target_net.eval()
-    for i_episode in tqdm(range(100)):
-        # Initialize the environment and get it's state
-        state, info = ENV.reset()
-        state = torch.tensor(
-            state, dtype=torch.float32, device=device
-        ).unsqueeze(0)
-        for t in count():
-            action = select_action(state, policy_net)
-            # Perform the action in the environment and get the next state,
-            # reward, and done flag
-            observation, reward, terminated, truncated, info = ENV.step(
-                action.item()
-            )
-            # Convert the observation to a tensor
-            reward = torch.tensor([reward], device=device)
-            done = terminated or truncated
-
-            if terminated:
-                next_state = None
-            else:
-                next_state = torch.tensor(
-                    observation, dtype=torch.float32, device=device
-                ).unsqueeze(0)
-            if done:
-                _potion: PotionomicsPotion = info["final_potion"]
-                logger.warning(f"Potion\n{_potion}")
-                if _potion is None or not _potion.contest_potion_comparison(
-                    contest_potion
-                ):
-                    logger.warning(f"Attempt {i_episode} Failed.")
-                else:
-                    logger.log(
-                        35, f"Potion {_potion} Passed the contest requirements"
-                    )
-                    sys.exit()
-                break
+    for contest_potion in roxanne_contest_potions:
+        index, _ = ENV.get_potion_recipe_from_name(contest_potion.potion_name)
+        ENV.update_environment(
+            ["task=roxanne_contest", f"recipe.recipe_index={index}"]
+        )
+        contest_loop(contest_potion, 1000)
+    corsac_contest_potions: List[PotionomicsPotion] = (
+        generate_corsac_contest_potions()
+    )
+    for contest_potion in corsac_contest_potions:
+        index, _ = ENV.get_potion_recipe_from_name(contest_potion.potion_name)
+        ENV.update_environment(
+            ["task=corsac_contest", f"recipe.recipe_index={index}"]
+        )
+        contest_loop(contest_potion, 1000)
+    finn_contest_potions: List[PotionomicsPotion] = (
+        generate_finn_contest_potions()
+    )
+    for contest_potion in finn_contest_potions:
+        index, _ = ENV.get_potion_recipe_from_name(contest_potion.potion_name)
+        ENV.update_environment(
+            ["task=finn_contest", f"recipe.recipe_index={index}"]
+        )
+        contest_loop(contest_potion, 1000)
+    anuberia_contest_potions: List[PotionomicsPotion] = (
+        generate_anuberia_contest_potions()
+    )
+    for contest_potion in anuberia_contest_potions:
+        index, _ = ENV.get_potion_recipe_from_name(contest_potion.potion_name)
+        ENV.update_environment(
+            ["task=anuberia_contest", f"recipe.recipe_index={index}"]
+        )
+        contest_loop(contest_potion, 1000)
+    robin_contest_potions: List[PotionomicsPotion] = (
+        generate_robin_contest_potions()
+    )
+    for contest_potion in robin_contest_potions:
+        index, _ = ENV.get_potion_recipe_from_name(contest_potion.potion_name)
+        ENV.update_environment(
+            ["task=robin_contest", f"recipe.recipe_index={index}"]
+        )
+        contest_loop(contest_potion, 1000)

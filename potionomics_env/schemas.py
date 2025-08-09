@@ -245,23 +245,18 @@ Base Price: {self.potion_base_price}\n
     ) -> bool:
         passes: bool = True
         if self.potion_name != contest_potion.potion_name:
-            print("Failed because names do not match")
             passes = False
         if self.potion_type != contest_potion.potion_type:
-            print("Failed because types do not match")
             passes = False
         if (
             self.potion_rank is None
             or self.potion_rank < contest_potion.potion_rank
         ):
-            print("Failed because Potion rank is either None or isn't high enough")
             passes = False
         elif self.potion_star < contest_potion.potion_star:
-            print("Failed due to insufficient stars")
             passes = False
         else:
             pass
         if self.potion_base_price < contest_potion.potion_base_price:
-            print("Failed because price isn't high enough")
             passes = False
         return passes
