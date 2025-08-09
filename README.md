@@ -17,7 +17,6 @@ Like many other games, potion crafting in Potionomics has deterministic state tr
 Since potion crafting has a definitive end (i.e., you've pressed the 'Craft' potion and are given a result), that means the environment is inherently episodic. For an agent whose only actions are to add ingredients to make a potion, that means that we can end the episode when one of the following things occurs:
 
 - The agent chooses to end the episode (using a reserved action)
-- The agent makes an illegal move (e.g., attempting to insert an item it doesn't have enough of)
 - The cauldron has reached its maximum item count
 - The cauldron has reached its maximum magimin amount
 
@@ -31,7 +30,7 @@ The action space of this portion of Potionomics is finite and, relatively speaki
 
 The state space is well-understood in that the information about what is considered a 'good' potion is readily available (to a human player). Things like ratios, potion quality and potion traits, as well as how these interact with the end product, are accessible and easy to grasp.
 
-However, converting the visual aids into compter-friendly terms was not as straightforward as explained later.
+However, converting the visual aids into computer-friendly terms was not as straightforward as explained later.
 
 ## Challenges
 
@@ -72,7 +71,6 @@ The first component is the cumulative delta. This is the sum of the absolute dis
 The logic is that, as the agent approaches the perfect recipe, the cumulative delta will approach zero.
 
 <div align="center">
-
 <table>
     <tr>
         <td colspan="2"><b>Definitions</b></td>
@@ -153,3 +151,9 @@ This formula is straightforward, yet it still provides meaningful rewards for pr
 #### Percent of Cauldron Used
 
 Raising potion quality relies heavily on filling up the cauldron's magimin capacity as much as possible. Therefore, the agent should be given incentive to do the same, while still focusing on creating functional potions. This equation: $cauldron\_fullness=\Sigma(Magimins_{ingredients})/Cauldron_{MagiminCapcity}$ is multiplied against the cumulative delta to try and encourage the agent to balance both aspects equally.
+
+#### Potion Price
+
+While this is not included in the agent's reward function, the potion price does play an obvious role in how 'good' the outcome is. It also serves as the main point of contention for the contests in the game. However, because the player usually creates more than one potion per craft, transforming the profit into something more meaningful to the agent is not as simple as it seems.
+
+My current thought is using something akin to a sigmoid function to normalize the expected potion profit to the [0, 1] range, but this doesn't work very well when the expected profit can be orders of magnitude higher than the cost of the ingredients. Additionally, there are times where making a potion at a loss is recommended or necessary due to other factors (e.g., custom orders, contests, etc.), so negative rewards aren't exactly ideal either.
