@@ -7,4 +7,5 @@ cauldron:
 recipe:
   randomize: false
 ingredients:
+  randomize: false
   allowed_ingredients: null
