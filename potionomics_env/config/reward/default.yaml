@@ -1,0 +1,7 @@
+cannot_make_potion_reward: 0.0 # This covers potion stability being too low and insufficient items in cauldron.
+stability_reward:
+  - 0.0 # This index is not expected to be used, it is just to keep in-line with the Enum
+  - 0.25
+  - 0.5
+  - 0.75
+  - 1.0

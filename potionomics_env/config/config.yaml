@@ -1,26 +1,25 @@
+defaults:
+  - _self_
+  - task: default
+  - reward: default
+
+
 data:
   potionomics_cauldrons: data/potionomics_cauldrons.csv
   potionomics_ingredients: data/potionomics_ingredients.csv
   potionomics_recipes: data/potionomics_recipes.csv
 
 # Configurations of the environment that may change per episode
-episode_cfg:
-  randomize_cauldron: true
-  randomize_recipe: true
-  randomize_ingredient_amount: true
-  # Index of the cauldron to use by default if randomize_cauldron is false
-  default_cauldron_index: 0
-  # Index of the recipe to use by default if randomize_recipe is false
-  default_recipe_index: 0
-  # The default amount of each ingredient available by default if randomize_ingredient_amount is false
-  default_ingredient_amount: 10  
+cauldron:
+  randomize: true
+  cauldron_index: 0
 
+recipe:
+  randomize: true
+  recipe_index: 0
 
-reward_cfg:
-  cannot_make_potion_reward: 0.0 # This covers potion stability being too low and insufficient items in cauldron.
-  stability_reward:
-    - 0.0 # This index is not expected to be used, it is just to keep in-line with the Enum
-    - 0.25
-    - 0.5
-    - 0.75
-    - 1.0
+ingredients:
+  randomize: true
+  minimum_amount: 0
+  maximum_amount: 10
+  allowed_ingredients: null

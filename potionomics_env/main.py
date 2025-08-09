@@ -316,43 +316,40 @@ class PotionomicsEnvironment(gym.Env):
         Both environment initialization and reset call this function.
         """
 
-        # BUG: Random cauldrons will break models that don't have a way to
-        # handle dynamic observation sizes
-        # (if you include them in the observation)
-        if self.env_cfg.episode_cfg.randomize_cauldron:
+        if self.env_cfg.cauldron.randomize:
             self.cauldron: PotionomicsCauldron = self.all_cauldrons[
                 np.random.choice(len(self.all_cauldrons), 1)[0]
             ].model_copy(deep=True)
         else:
             self.cauldron: PotionomicsCauldron = self.all_cauldrons[
-                self.env_cfg.episode_cfg.default_cauldron_index
+                self.env_cfg.cauldron.cauldron_index
             ]
         self.cauldron.setup()
-        if self.env_cfg.episode_cfg.randomize_recipe:
+        if self.env_cfg.recipe.randomize:
             self.recipe: PotionomicsPotionRecipe = self.all_recipes[
                 np.random.choice(len(self.all_recipes), 1)[0]
             ]
         else:
             self.recipe: PotionomicsPotionRecipe = self.all_recipes[
-                self.env_cfg.episode_cfg.default_recipe_index
+                self.env_cfg.recipe.recipe_index
             ]
-        if self.env_cfg.episode_cfg.randomize_ingredient_amount:
+        if self.env_cfg.ingredients.randomize:
             self.num_ingredients: np.ndarray = np.ascontiguousarray(
                 np.random.randint(
-                    low=0,
-                    high=self.cauldron.max_num_items_allowed + 1,
+                    low=self.env_cfg.ingredients.minimum_amount,
+                    high=self.env_cfg.ingredients.maximum_amount + 1,
                     size=len(self.all_ingredients) + 1,
                 )
             )
         else:
             self.num_ingredients = np.ascontiguousarray(
-                [self.env_cfg.episode_cfg.default_ingredient_amount]
+                [self.env_cfg.ingredients.maximum_amount]
                 * (len(self.all_ingredients) + 1)
             )
         self.num_ingredients[0] = 0  # Set the None action to have 0
-        self.stability_reward = self.env_cfg.reward_cfg.stability_reward
+        self.stability_reward = self.env_cfg.reward.stability_reward
         self.cannot_make_potion_reward = (
-            self.env_cfg.reward_cfg.cannot_make_potion_reward
+            self.env_cfg.reward.cannot_make_potion_reward
         )
 
     def update_environment(self, hydra_overrides: List[str]) -> None:
