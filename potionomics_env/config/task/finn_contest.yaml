@@ -1,0 +1,12 @@
+# @package _global_
+
+### Environment Configuration ###
+cauldron:
+  randomize: false
+  cauldron_index: 19 # Crystal_Cauldron_2
+recipe:
+  randomize: false
+ingredients:
+  randomize: false
+  allowed_ingredients: null
+
