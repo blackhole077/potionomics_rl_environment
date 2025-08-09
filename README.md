@@ -126,9 +126,7 @@ In-game, potions that have higher stability have a higher chance to gain one or 
 
 However, to avoid adding more complexity to the environment, I opted to turn this into a bonus reward instead. This also allowed me to narrow the task down to "whether the agent can make a functional potion or not".
 
-The stability bonus was originally calculated using this equation, which I came up with arbitrarily.
-
-One final note, the co-efficient $1.661$ was chosen because the bonus reward becomes $1$ with perfect ratios.
+Initially, the stability bonus was originally calculated using this equation which I came up with arbitrarily, with the co-efficient $1.661$ being chosen because the bonus reward becomes $1$ with perfect ratios.
 <div align="center">
     <p>
         <b>&epsilon; = 1 &times; 10<sup>-8</sup></b>
@@ -146,7 +144,7 @@ However, the complexity of the equation did not really prove worthwhile, nor did
     </p>
 </div>
 
-This formula is straightforward, yet it still provides meaningful rewards for producing high-stability potions.
+This formula is straightforward, yet it still provides meaningful rewards for producing high-stability potions. I also made it configurable so that tuning this bonus reward (or outright removing it) would not require re-writing the environment code.
 
 #### Percent of Cauldron Used
 
