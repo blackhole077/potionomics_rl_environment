@@ -1,0 +1,10 @@
+# @package _global_
+
+### Environment Configuration ###
+cauldron:
+  randomize: false
+  cauldron_index: 10 # Storm_Cauldron_2
+recipe:
+  randomize: false
+ingredients:
+  allowed_ingredients: null
