@@ -319,13 +319,14 @@ if __name__ == "__main__":
     steps_done = 0
 
     if torch.cuda.is_available():
-        num_episodes = 25000
+        num_episodes = 5000
     else:
         num_episodes = 50
 
-    # run_rl_loop(policy_net, target_net, memory, num_episodes)
+    run_rl_loop(policy_net, target_net, memory, num_episodes)
     # logger.log(30, "Saving model to path")
     path = "potionomics_agent.pth"
+    policy_net.save(path)
     policy_net.load(path)
     logger.log(35, "Testing RL Agent...")
     roxanne_contest_potions: List[PotionomicsPotion] = (

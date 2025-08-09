@@ -310,6 +310,7 @@ class PotionomicsEnvironment(gym.Env):
             zip(np.arange(1, len(all_ingredients) + 1), self.all_ingredients)
         )
         self._action_to_ingredient[0] = None
+        self.current_recipe_index: int = -1
 
     def configure_environment(self) -> None:
         """Configure the environment to use fixed or randomized elements.
@@ -325,14 +326,16 @@ class PotionomicsEnvironment(gym.Env):
                 self.env_cfg.cauldron.cauldron_index
             ]
         self.cauldron.setup()
+
         if self.env_cfg.recipe.randomize:
-            self.recipe: PotionomicsPotionRecipe = self.all_recipes[
-                np.random.choice(len(self.all_recipes), 1)[0]
-            ]
+            self.current_recipe_index = np.random.choice(
+                len(self.all_recipes), 1
+            )[0]
         else:
-            self.recipe: PotionomicsPotionRecipe = self.all_recipes[
-                self.env_cfg.recipe.recipe_index
-            ]
+            self.current_recipe_index = self.env_cfg.recipe.recipe_index
+        self.recipe: PotionomicsPotionRecipe = self.all_recipes[
+            self.current_recipe_index
+        ]
         if self.env_cfg.ingredients.randomize:
             self.num_ingredients: np.ndarray = np.ascontiguousarray(
                 np.random.randint(
@@ -781,16 +784,16 @@ conditional branches for calculating potion rank modification. Returning 0."
         ### Ingredient Information ###
         observation.extend(self.num_ingredients.tolist())
         observation.extend(self.current_ingredients)
-        ### Cauldron Information ###
+        ### Recipe Information ###
+        observation.append(self.current_recipe_index)
         observation.extend(list(self.calculate_current_magimin_ratios()))
         observation.extend(self.recipe.magimin_ratios)
+        ### Cauldron Information ###
         observation.append(self.cauldron.current_total_magimin_amount)
         observation.append(self.cauldron.max_total_magimin_allowed)
         observation.append(self.cauldron.current_num_items)
         observation.append(self.cauldron.max_num_items_allowed)
-        ### Potion Information ###
-        observation.append(int(self.current_stability))
-        observation.append(int(self.potion_tier) if self.potion_tier else -1)
+
         return observation
 
     def _get_info(self):
