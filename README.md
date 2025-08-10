@@ -2,6 +2,28 @@
 
 As stated in the description of this repository, this code is meant to simulate the mechanics involved in the potion crafting part of [PC game Potionomics](https://store.steampowered.com/app/1874490/Potionomics/).
 
+## State and Action Space
+
+### State Space
+
+The state space, if I understand correctly, would (probably) be a combination of the following factors:
+
+- The current cauldron in use
+- The current set of ingredients in the cauldron
+
+This is because each cauldron has a different number of maximum ingredients and/or magimins allowed, which in turn affects the number of possible states.
+
+Naively, if we take the best cauldron in game, which allows a total of 14 ingredients, we'd have:
+
+$$ {206 \choose 14} = 1.8094666e+21 $$
+
+However, this is cut down by the fact that not all combinations ingredients would result in a valid potion. Therefore, another way to look at the state space would be the union of all valid combinations of ingredients for each potion.
+
+### Action Space
+
+The action space is simply adding ingredients, of which there are 206, and a reserved 'DONE' action, for a total of 207. While removing ingredients is part of the actual game, I opted to keep things simple for myself.
+
+
 ## Motivation
 
 The idea originated in an attempt to write a [Constraint Solver](https://en.wikipedia.org/wiki/Constraint_programming) that would find a set of optimal ingredient combinations to get a potion with certain properties. However, the project pivoted early on due to the realization that I needed to maintain some sort of internal state which, as far as I am aware, is not feasible in constraint programming.
