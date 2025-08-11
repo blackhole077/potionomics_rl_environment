@@ -799,6 +799,7 @@ conditional branches for calculating potion rank modification. Returning 0."
         self.current_base_price: int = -1
         self.cost_of_items: int = 0
         self.potion_traits: np.ndarray = np.zeros((5,), dtype=int)
+        self.cauldron.setup() # Reset the cauldron values
         observation = self._get_obs()
         info = self._get_info()
         return observation, info
