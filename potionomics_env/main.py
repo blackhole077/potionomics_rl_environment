@@ -70,7 +70,9 @@ class PotionomicsEnvironment(gym.Env):
         self.all_cauldrons = all_cauldrons
         self.env_cfg = environment_config
         # Initialize the environment
-        self.reset()
+        self.current_recipe_index: int = -1
+        self.configure_environment()
+        self.reset()  # This initializes the values
         self.potion_magimin_thresholds_array = np.array(
             [
                 [0, 10, 20, 30, 40, 50],
@@ -304,13 +306,64 @@ class PotionomicsEnvironment(gym.Env):
                 order="C",
             ),
         }
-        ### GYM-SPECIFIC INITIALIZATIONS ###
-        self.action_space = gym.spaces.Discrete(len(all_ingredients) + 1)
         self._action_to_ingredient: Dict[int, PotionomicsIngredient] = dict(
             zip(np.arange(1, len(all_ingredients) + 1), self.all_ingredients)
         )
         self._action_to_ingredient[0] = None
-        self.current_recipe_index: int = -1
+        ### GYM-SPECIFIC INITIALIZATIONS ###
+        self.observation_space = gym.spaces.Dict(
+            {
+                ### Ingredient Information ###
+                "ingredients_remaining": gym.spaces.Box(
+                    low=self.env_cfg.ingredients.minimum_amount,
+                    high=self.env_cfg.ingredients.maximum_amount + 1,
+                    shape=(len(self.all_ingredients) + 1,),
+                    dtype=int,
+                ),
+                "current_ingredients": gym.spaces.Box(
+                    low=0,
+                    high=self.cauldron.max_num_items_allowed,
+                    shape=(len(self.all_ingredients) + 1,),
+                    dtype=int,
+                ),
+                ### Recipe Information ###
+                "current_recipe": gym.spaces.Box(
+                    low=0, high=len(self.all_recipes), shape=(1,), dtype=int
+                ),
+                "current_ratios": gym.spaces.Box(
+                    low=0.0, high=1.0, shape=(5,), dtype=np.float32
+                ),
+                "recipe_ratios": gym.spaces.Box(
+                    low=0.0, high=1.0, shape=(5,), dtype=np.float32
+                ),
+                ### Cauldron Information ###
+                "cauldron_magimin_total": gym.spaces.Box(
+                    low=0,
+                    high=self.cauldron.max_total_magimin_allowed,
+                    shape=(1,),
+                    dtype=int,
+                ),
+                "cauldron_magimin_max": gym.spaces.Box(
+                    low=0,
+                    high=self.cauldron.max_total_magimin_allowed,
+                    shape=(1,),
+                    dtype=int,
+                ),
+                "cauldron_current_num_items": gym.spaces.Box(
+                    low=0,
+                    high=self.cauldron.max_num_items_allowed,
+                    shape=(1,),
+                    dtype=int,
+                ),
+                "cauldron_max_items": gym.spaces.Box(
+                    low=0,
+                    high=self.cauldron.max_num_items_allowed,
+                    shape=(1,),
+                    dtype=int,
+                ),
+            }
+        )
+        self.action_space = gym.spaces.Discrete(len(self._action_to_ingredient))
 
     def configure_environment(self) -> None:
         """Configure the environment to use fixed or randomized elements.
@@ -342,12 +395,14 @@ class PotionomicsEnvironment(gym.Env):
                     low=self.env_cfg.ingredients.minimum_amount,
                     high=self.env_cfg.ingredients.maximum_amount + 1,
                     size=len(self.all_ingredients) + 1,
-                )
+                ),
+                dtype=int,
             )
         else:
             self.num_ingredients = np.ascontiguousarray(
                 [self.env_cfg.ingredients.maximum_amount]
-                * (len(self.all_ingredients) + 1)
+                * (len(self.all_ingredients) + 1),
+                dtype=int,
             )
         self.num_ingredients[0] = 0  # Set the None action to have 0
         self.stability_reward = self.env_cfg.reward.stability_reward
@@ -494,7 +549,7 @@ conditional branches for calculating potion rank modification. Returning 0."
                 / self.cauldron.current_total_magimin_amount
             )
             if self.cauldron.current_total_magimin_amount > 0
-            else 0
+            else 0.0
         )
         current_b_magimin_ratio: float = (
             (
@@ -502,7 +557,7 @@ conditional branches for calculating potion rank modification. Returning 0."
                 / self.cauldron.current_total_magimin_amount
             )
             if self.cauldron.current_total_magimin_amount > 0
-            else 0
+            else 0.0
         )
         current_c_magimin_ratio: float = (
             (
@@ -510,7 +565,7 @@ conditional branches for calculating potion rank modification. Returning 0."
                 / self.cauldron.current_total_magimin_amount
             )
             if self.cauldron.current_total_magimin_amount > 0
-            else 0
+            else 0.0
         )
         current_d_magimin_ratio: float = (
             (
@@ -518,7 +573,7 @@ conditional branches for calculating potion rank modification. Returning 0."
                 / self.cauldron.current_total_magimin_amount
             )
             if self.cauldron.current_total_magimin_amount > 0
-            else 0
+            else 0.0
         )
         current_e_magimin_ratio: float = (
             (
@@ -526,7 +581,7 @@ conditional branches for calculating potion rank modification. Returning 0."
                 / self.cauldron.current_total_magimin_amount
             )
             if self.cauldron.current_total_magimin_amount > 0
-            else 0
+            else 0.0
         )
         return np.array(
             [
@@ -535,7 +590,8 @@ conditional branches for calculating potion rank modification. Returning 0."
                 current_c_magimin_ratio,
                 current_d_magimin_ratio,
                 current_e_magimin_ratio,
-            ]
+            ],
+            dtype=np.float32,
         )
 
     def calculate_current_stability(self) -> float:
@@ -735,15 +791,15 @@ conditional branches for calculating potion rank modification. Returning 0."
 
         super().reset()
         self.current_ingredients: np.ndarray = np.ascontiguousarray(
-            np.zeros(len(self.all_ingredients) + 1, dtype=np.int_)
+            np.zeros(len(self.all_ingredients) + 1, dtype=int)
         )
         self.current_stability = PotionomicsPotionStability.CANNOTMAKE
         self.potion_tier: PotionomicsPotionTier = None
         self.potion_num_stars = -1
         self.current_base_price: int = -1
         self.cost_of_items: int = 0
-        self.potion_traits: np.ndarray = np.zeros((5,))
-        self.configure_environment()
+        self.potion_traits: np.ndarray = np.zeros((5,), dtype=int)
+        self.cauldron.setup() # Reset the cauldron values
         observation = self._get_obs()
         info = self._get_info()
         return observation, info
@@ -779,21 +835,31 @@ conditional branches for calculating potion rank modification. Returning 0."
         info = self._get_info()
         return observation, reward, terminated, False, info
 
-    def _get_obs(self) -> List[Union[int, float]]:
-        observation = []
-        ### Ingredient Information ###
-        observation.extend(self.num_ingredients.tolist())
-        observation.extend(self.current_ingredients)
-        ### Recipe Information ###
-        observation.append(self.current_recipe_index)
-        observation.extend(list(self.calculate_current_magimin_ratios()))
-        observation.extend(self.recipe.magimin_ratios)
-        ### Cauldron Information ###
-        observation.append(self.cauldron.current_total_magimin_amount)
-        observation.append(self.cauldron.max_total_magimin_allowed)
-        observation.append(self.cauldron.current_num_items)
-        observation.append(self.cauldron.max_num_items_allowed)
-
+    def _get_obs(self) -> Dict[str, Union[np.ndarray, int]]:
+        observation = {
+            ### Ingredient Information ###
+            "ingredients_remaining": self.num_ingredients,
+            "current_ingredients": self.current_ingredients,
+            ### Recipe Information ###
+            "current_recipe": np.array([self.current_recipe_index], dtype=int),
+            "current_ratios": self.calculate_current_magimin_ratios(),
+            "recipe_ratios": np.array(
+                self.recipe.magimin_ratios, dtype=np.float32
+            ),
+            ### Cauldron Information ###
+            "cauldron_magimin_total": np.array(
+                [self.cauldron.current_total_magimin_amount], dtype=int
+            ),
+            "cauldron_magimin_max": np.array(
+                [self.cauldron.max_total_magimin_allowed], dtype=int
+            ),
+            "cauldron_current_num_items": np.array(
+                [self.cauldron.current_num_items], dtype=int
+            ),
+            "cauldron_max_items": np.array(
+                [self.cauldron.max_num_items_allowed], dtype=int
+            ),
+        }
         return observation
 
     def _get_info(self):
@@ -837,6 +903,13 @@ conditional branches for calculating potion rank modification. Returning 0."
         for index, _recipe in enumerate(self.all_recipes):
             if _recipe.name == potion_name:
                 return index, _recipe
+
+
+def register_env() -> None:
+    gym.register(
+        id="PotionomicsEnv-v0",
+        entry_point=get_env,
+    )
 
 
 def get_env() -> PotionomicsEnvironment:

@@ -6,23 +6,93 @@ As stated in the description of this repository, this code is meant to simulate 
 
 ### State Space
 
-The state space, if I understand correctly, would (probably) be a combination of the following factors:
+The state space is defined by the schema below. Initially I had assumed that the
+state space would be different from the actual observation provided to the agent,
+but it appears this is not the case.
 
-- The current cauldron in use
-- The current set of ingredients in the cauldron
+The schema contains the following pieces of information:
 
-This is because each cauldron has a different number of maximum ingredients and/or magimins allowed, which in turn affects the number of possible states.
+- The number of ingredients remaining in stock, represented as a count-based vector
+- The ingredients currently in use, represented as a count-based vector
+- The index of the current recipe
+- The magimin ratios of the recipe
+- The magimin ratios of the items in the cauldron
+- The magimin total of the items in the cauldron
+- The maximum magimins allowed by the cauldron
+- The current number of ingredients in the cauldron
+- The maximum number of ingredients allowed in the cauldron
 
-Naively, if we take the best cauldron in game, which allows a total of 14 ingredients, we'd have:
+<details>
+<summary> Observation Space Schema </summary>
 
-$$ {206 \choose 14} = 1.8094666e+21 $$
-
-However, this is cut down by the fact that not all combinations ingredients would result in a valid potion. Therefore, another way to look at the state space would be the union of all valid combinations of ingredients for each potion.
+```python
+self.observation_space = gym.spaces.Dict(
+    {
+        ### Ingredient Information ###
+        "ingredients_remaining": gym.spaces.Box(
+            low=self.env_cfg.ingredients.minimum_amount,
+            high=self.env_cfg.ingredients.maximum_amount + 1,
+            shape=(len(self.all_ingredients) + 1,),
+            dtype=int,
+        ),
+        "current_ingredients": gym.spaces.Box(
+            low=0,
+            high=self.cauldron.max_num_items_allowed,
+            shape=(len(self.all_ingredients) + 1,),
+            dtype=int,
+        ),
+        ### Recipe Information ###
+        "current_recipe": gym.spaces.Box(
+            low=0, high=len(self.all_recipes), shape=(1,), dtype=int
+        ),
+        "current_ratios": gym.spaces.Box(
+            low=0.0, high=1.0, shape=(5,), dtype=np.float32
+        ),
+        "recipe_ratios": gym.spaces.Box(
+            low=0.0, high=1.0, shape=(5,), dtype=np.float32
+        ),
+        ### Cauldron Information ###
+        "cauldron_magimin_total": gym.spaces.Box(
+            low=0,
+            high=self.cauldron.max_total_magimin_allowed,
+            shape=(1,),
+            dtype=int,
+        ),
+        "cauldron_magimin_max": gym.spaces.Box(
+            low=0,
+            high=self.cauldron.max_total_magimin_allowed,
+            shape=(1,),
+            dtype=int,
+        ),
+        "cauldron_current_num_items": gym.spaces.Box(
+            low=0,
+            high=self.cauldron.max_num_items_allowed,
+            shape=(1,),
+            dtype=int,
+        ),
+        "cauldron_max_items": gym.spaces.Box(
+            low=0,
+            high=self.cauldron.max_num_items_allowed,
+            shape=(1,),
+            dtype=int,
+        ),
+    }
+)
+```
+</details>
 
 ### Action Space
 
-The action space is simply adding ingredients, of which there are 206, and a reserved 'DONE' action, for a total of 207. While removing ingredients is part of the actual game, I opted to keep things simple for myself.
+The action space, defined in the schema below, is simply adding ingredients, of which there are 206, and a reserved 'DONE' action, for a total of 207. While removing ingredients is part of the actual game, I opted to keep things simple for myself.
 
+
+<details>
+<summary> Action Space Schema </summary>
+
+```python
+self.action_space = gym.spaces.Discrete(len(self._action_to_ingredient))
+```
+</details>
 
 ## Motivation
 

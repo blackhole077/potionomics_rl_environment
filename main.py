@@ -6,14 +6,17 @@ from pathlib import Path
 import random
 
 import logging
-from typing import List, Union
+import sys
+from typing import Dict, List, Union
+import gymnasium
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from tqdm import tqdm
 
-from potionomics_env.main import get_env
+from potionomics_env.main import get_env, register_env
 from potionomics_env.potionomics_test_cases import (
     generate_corsac_contest_potions,
     generate_finn_contest_potions,
@@ -28,7 +31,6 @@ logging.addLevelName(30, "SUCCESS")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-ENV = get_env()
 BATCH_SIZE = 128
 GAMMA = 0.99
 EPS_START = 0.9
@@ -88,7 +90,7 @@ def select_action(state: torch.Tensor, policy_net: DQN):
     steps_done += 1
 
     # Use the environment's action masking function
-    action_mask = ENV._calculate_action_mask()
+    action_mask = ENV.action_mask
     valid_actions = [i for i, valid in enumerate(action_mask) if valid]
 
     if sample > eps_threshold:
@@ -162,6 +164,11 @@ def optimize_model():
     optimizer.step()
 
 
+def flatten_state(state: Dict[str, np.ndarray]) -> np.ndarray:
+    res = np.concatenate([array for array in state.values()], dtype=np.float32)
+    return res
+
+
 def run_rl_loop(
     policy_net: DQN,
     target_net: DQN,
@@ -178,7 +185,7 @@ def run_rl_loop(
         # Initialize the environment and get it's state
         state, info = ENV.reset()
         state = torch.tensor(
-            state, dtype=torch.float32, device=device
+            flatten_state(state), dtype=torch.float32, device=device
         ).unsqueeze(0)
         for t in count():
             action = select_action(state, policy_net)
@@ -195,7 +202,9 @@ def run_rl_loop(
                 next_state = None
             else:
                 next_state = torch.tensor(
-                    observation, dtype=torch.float32, device=device
+                    flatten_state(observation),
+                    dtype=torch.float32,
+                    device=device,
                 ).unsqueeze(0)
             if is_training:
                 if reward > 0 and reward >= HIGHEST_REWARD:
@@ -244,7 +253,7 @@ def run_rl_loop(
 
 
 def select_action_greedy(state: torch.Tensor, policy_net: DQN):
-    action_mask = ENV._calculate_action_mask()
+    action_mask = ENV.action_mask
     with torch.no_grad():
         q_values = policy_net(state)
         # Mask invalid actions by setting their Q-values to -inf
@@ -263,8 +272,11 @@ def contest_loop(contest_potion: PotionomicsPotion, num_attempts: int = 100):
     for i_episode in tqdm(range(num_attempts)):
         # Initialize the environment and get it's state
         state, info = ENV.reset()
+        _state_flattened = np.concatenate(
+            [array for array in state.values()], dtype=np.float32
+        )
         state = torch.tensor(
-            state, dtype=torch.float32, device=device
+            _state_flattened, dtype=torch.float32, device=device
         ).unsqueeze(0)
         for t in count():
             action = select_action_greedy(state, policy_net)
@@ -281,7 +293,9 @@ def contest_loop(contest_potion: PotionomicsPotion, num_attempts: int = 100):
                 next_state = None
             else:
                 next_state = torch.tensor(
-                    observation, dtype=torch.float32, device=device
+                    flatten_state(observation),
+                    dtype=torch.float32,
+                    device=device,
                 ).unsqueeze(0)
             if done:
                 _potion: PotionomicsPotion = info["final_potion"]
@@ -300,14 +314,17 @@ def contest_loop(contest_potion: PotionomicsPotion, num_attempts: int = 100):
 
 
 if __name__ == "__main__":
-    print("Starting RL training...")
+    register_env()
+    ENV = gymnasium.make(id="PotionomicsEnv-v0")
+    logger.log(30, "Starting RL training...")
     # Get number of actions from gym action space
     n_actions = ENV.action_space.n
     # Get the number of state observations
     state, info = ENV.reset()
-    n_observations = len(state)
-    logger.debug(
-        f"Number of Actions: {n_actions}\tNumber of Observations: {n_observations}"
+    n_observations = len(flatten_state(state))
+    logger.log(
+        30,
+        f"Number of Actions: {n_actions}\tNumber of Observations: {n_observations}",
     )
     policy_net = DQN(n_observations, n_actions).to(device)
     target_net = DQN(n_observations, n_actions).to(device)
